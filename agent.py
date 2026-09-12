@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 import os
 import json
@@ -16,6 +17,8 @@ from langfuse import Langfuse, observe as langfuse_observe
 load_dotenv()
 
 config = load_config("config/config.yaml")
+
+_background_tasks: set[asyncio.Task] = set()
 
 langfuse = Langfuse(
     public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
@@ -426,6 +429,22 @@ Respond with only a JSON object in this exact shape, no other text:
     return json.loads(verdict_text)
 
 
+async def _check_answer_quality(
+    question: str, context: str, answer: str, history: list[dict],
+    base_url: str, api_key: str, model: str,
+) -> None:
+    """Run reflect() after a streamed answer has already been sent.
+    Purely observational - logs to console and Langfuse, never changes
+    what the user already saw.
+    """
+    try:
+        verdict = await reflect(question, context, answer, history, base_url, api_key, model)
+        if not verdict.get("sufficient"):
+            print(f"[streaming reflection] insufficient: {verdict.get('missing', '')}")
+    except Exception as e:
+        print(f"[streaming reflection] failed: {e}")
+
+
 def _validated_answer(answer: str, verdict: dict) -> str:
     if verdict.get("sufficient"):
         return answer
@@ -552,3 +571,9 @@ async def stream_chat_with_agent(question: str, session_id: int) -> AsyncIterato
 
     await save_message(session_id, "user", question)
     await save_message(session_id, "assistant", answer)
+
+    task = asyncio.create_task(
+        _check_answer_quality(question, context, answer, history, base_url, api_key, model)
+    )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
