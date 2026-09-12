@@ -1,6 +1,6 @@
 # config.yaml
 model:
-  chat: Qwen/Qwen3.8-27B          
+  chat: google/gemma-4-31B          
   embedding: Alibaba-NLP/gte-Qwen2-7B-instruct
   embedding_dimensions: 3584
 
