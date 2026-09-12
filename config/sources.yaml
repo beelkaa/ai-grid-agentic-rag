@@ -1,0 +1,23 @@
+sources:
+  - url: https://ai-grid.io
+    category: company
+  - url: https://platform.ai-grid.io/docs
+    category: getting-started
+  - url: https://platform.ai-grid.io/docs/models
+    category: models
+  - url: https://platform.ai-grid.io/docs/models/qwen-qwen3-8-27b
+    category: models
+  - url: https://platform.ai-grid.io/docs/models/meta-models-muse-glimmer-30b
+    category: models
+  - url: https://platform.ai-grid.io/docs/models/qwen3-30b-a3b-thinking
+    category: models
+  - url: https://platform.ai-grid.io/docs/models/google-gemma-4-31b
+    category: models
+  - url: https://platform.ai-grid.io/docs/models/zai-glm-ocr
+    category: models
+  - url: https://platform.ai-grid.io/docs/models/deepseek-ocr
+    category: models
+  - url: https://platform.ai-grid.io/docs/models/alibaba-nlp-gte-qwen2-7b-instruct
+    category: models
+  - url: https://platform.ai-grid.io/pricing
+    category: pricing

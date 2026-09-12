@@ -1,0 +1,12 @@
+categories:
+  - name: company
+    description: Company info, mission, GPU infra specs, IAAS/PAAS plans and pricing, FAQ (ai-grid.io)
+
+  - name: getting-started
+    description: Platform overview, quickstart, framework integration (LangChain, LangGraph, LlamaIndex)
+
+  - name: models
+    description: Model specifications and capabilities (excluding pricing details)
+
+  - name: pricing
+    description: Per-token pricing for platform models (platform.ai-grid.io/pricing)

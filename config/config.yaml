@@ -1,0 +1,17 @@
+# config.yaml
+model:
+  chat: Qwen/Qwen3.8-27B          
+  embedding: Alibaba-NLP/gte-Qwen2-7B-instruct
+  embedding_dimensions: 3584
+
+agent:
+  temperature: 0.2
+  max_iterations: 5
+  system_prompt_path: prompt/system.txt
+
+retrieval:
+  collection_name: documents
+  top_k: 5
+
+timeouts:
+  http_seconds: 120.0
