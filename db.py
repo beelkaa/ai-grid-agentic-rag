@@ -48,6 +48,62 @@ async def get_messages(session_id: int) -> list[dict]:
             session_id
         )
         return [{"role": row["role"], "content": row["content"]} for row in rows]
+
+async def session_exists(session_id: int) -> bool:
+    async with pool.acquire() as connection:
+        return await connection.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1)",
+            session_id
+        )
+
+async def list_sessions() -> list[dict]:
+    async with pool.acquire() as connection:
+        rows = await connection.fetch("""
+            SELECT
+                sessions.id,
+                COALESCE(
+                    NULLIF(SUBSTRING(first_user.content FROM 1 FOR 40), ''),
+                    'New chat'
+                ) AS title,
+                COALESCE(last_message.created_at, sessions.created_at) AS last_updated
+            FROM sessions
+            LEFT JOIN LATERAL (
+                SELECT content
+                FROM messages
+                WHERE session_id = sessions.id AND role = 'user'
+                ORDER BY created_at, id
+                LIMIT 1
+            ) AS first_user ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT created_at
+                FROM messages
+                WHERE session_id = sessions.id
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+            ) AS last_message ON TRUE
+            ORDER BY last_updated DESC
+        """)
+        return [
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "last_updated": row["last_updated"],
+            }
+            for row in rows
+        ]
+
+async def delete_session(session_id: int) -> bool:
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            await connection.execute(
+                "DELETE FROM messages WHERE session_id = $1",
+                session_id
+            )
+            deleted = await connection.fetchrow(
+                "DELETE FROM sessions WHERE id = $1 RETURNING id",
+                session_id
+            )
+            return deleted is not None
     
 async def create_session() -> int:
     async with pool.acquire() as connection:

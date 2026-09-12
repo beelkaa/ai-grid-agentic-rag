@@ -1,9 +1,17 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from agent import chat_with_agent, stream_chat_with_agent
-from db import init_db, create_tables, create_session
+from db import (
+    init_db,
+    create_tables,
+    create_session,
+    delete_session,
+    get_messages,
+    list_sessions,
+    session_exists,
+)
 from ingest_real_content import run_ingestion
 
 app = FastAPI()
@@ -47,3 +55,18 @@ async def startup():
 async def ingest():
     count = await run_ingestion()
     return{"status": "done", "chunk_ingested": count}
+
+@app.get("/sessions")
+async def sessions():
+    return await list_sessions()
+
+@app.get("/sessions/{session_id}/messages")
+async def session_messages(session_id: int):
+    if not await session_exists(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return await get_messages(session_id)
+
+@app.delete("/sessions/{session_id}", status_code=204)
+async def delete_session_endpoint(session_id: int):
+    if not await delete_session(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
