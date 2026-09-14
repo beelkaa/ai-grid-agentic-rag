@@ -4,7 +4,43 @@ An agentic RAG assistant for official AI Grid documentation, with a FastAPI back
 
 ## Architecture Overview
 
-The backend in `agent.py` implements a hand-written ReAct loop. It does not use LangChain or LangGraph.
+This is a production-oriented Agentic RAG system for official AI Grid documentation, not a single retrieval-augmented prompt. The backend implements a hand-written ReAct loop with tool use, iterative retrieval, reflection, deterministic grounding safeguards, live model discovery, vector retrieval, persistent conversations, Langfuse observability, and a repeatable evaluation harness. It does not use LangChain, LangGraph, or LlamaIndex.
+
+Basic RAG usually looks like:
+
+```text
+query -> retrieve -> generate
+```
+
+This project uses an agentic path:
+
+```text
+query -> reason -> choose tool -> retrieve/inspect data -> observe
+	   -> reason -> reflect -> validate -> answer
+```
+
+```mermaid
+flowchart LR
+	U[User] --> API[FastAPI API]
+	API --> DB[(PostgreSQL<br/>sessions and messages)]
+	API --> A[Agent entry point]
+	A --> R[Hand-written ReAct loop]
+	R --> T{Tool selection}
+	T --> S[search_documents]
+	T --> M[list_available_models]
+	S --> E[AI Grid embeddings API]
+	E --> Q[(Qdrant<br/>vector retrieval)]
+	M --> G[AI Grid live model catalog API]
+	Q --> O[Tool observation]
+	G --> O
+	O --> R
+	R --> D[Draft answer]
+	D --> F[reflect: groundedness and completeness]
+	F --> V[Deterministic safety backstop]
+	V --> OUT[Validated answer]
+	R -. traces and token usage .-> L[Langfuse]
+	OUT --> API
+```
 
 1. **Reason**: the AI Grid chat model receives the system prompt and conversation history and chooses whether to answer or call a tool.
 2. **Act**: the backend runs `search_documents` for semantic documentation retrieval or `list_available_models` for the live model catalog.
@@ -19,6 +55,41 @@ The answer gate has two independent checks:
 - `_contains_deprecated_model_name()` is a deterministic backstop for known stale names, currently `gpt oss 20b` and `gpt-oss-120b`.
 
 Both are needed because testing showed that the LLM judge is usually reliable but not deterministic. The backstop guarantees that a known-bad deprecated model name cannot reach a user if `reflect()` has an off run. This matters in practice: current AI Grid pricing/plans documentation still contains a retired model name as a quota label, while that model's dedicated documentation page returns 404. An unsafe or insufficient answer is replaced with a fixed documentation-insufficiency response.
+
+### Agent Execution Flow
+
+The normal documentation path is iterative rather than a fixed one-shot chain:
+
+```text
+User query
+	|
+	v
+reason() with tool_choice="auto"
+	|
+	+--> answer directly for greetings, suitable follow-ups, or simple conversation
+	|
+	+--> act() -> search_documents(query, category?)
+	|                 |
+	|                 +--> embed query -> query Qdrant -> return text and source URLs
+	|                 |
+	|                 +--> observe_step() adds the tool result to the message history
+	|                                      |
+	|                                      v
+	|                              reason() again, up to max_iterations
+	|
+	+--> act() -> list_available_models() for live model-catalog questions
+	|
+	v
+reflect(question, retrieved context, draft, history)
+	|
+	v
+deterministic deprecated-name backstop
+	|
+	v
+validated answer, then PostgreSQL persistence
+```
+
+There are deliberate alternate paths. Model-catalog questions bypass document retrieval and call the live AI Grid `/models` endpoint. Pricing questions remove the catalog tool so pricing is retrieved from documentation. The streaming API buffers retrieval-backed answers until reflection and validation complete; no-search conversation can remain responsive while its reflection check runs observationally in the background. Off-topic weather, sports, cooking, and restaurant questions are rejected early by the streaming path.
 
 ## Tech Stack
 
@@ -217,9 +288,31 @@ source venv/bin/activate
 python -m backend.evaluation.run
 ```
 
-`run_eval.py` runs seven cases three times each by default. Cases cover OCR/image handling, current model capabilities and comparisons, refund-policy uncertainty, exact pricing, multi-model recommendations, and the deprecated-model regression. `score_answer()` uses case-insensitive substring matching. An expected fact can be a tuple of acceptable alternative phrases, and forbidden facts must never appear.
+The evaluator is `backend/evaluation/run.py` (the repository does not contain a separate root `run_eval.py`). It runs seven cases three times each by default. Cases cover OCR/image handling, current model capabilities and comparisons, refund-policy uncertainty, exact pricing, multi-model recommendations, and the deprecated-model regression. `score_answer()` uses case-insensitive substring matching. An expected fact can be a tuple of acceptable alternative phrases, and forbidden facts must never appear.
 
 The script prints each answer, per-run scores, and hit counts. `MIN_HIT_RATE = 1` means every expected fact must appear at least once across the three runs; a forbidden fact fails if it appears even once. It exits `0` only when every case passes and `1` when any case fails, so it can gate CI. A failure should be read from the case summary: identify the fact with fewer than the required hits, then inspect the printed answers to distinguish retrieval, model nondeterminism, grounding/reflection rejection, or an outdated expectation. This remains a lightweight behavioral check, not a semantic, citation, latency, or cost evaluator.
+
+The currently measurable evaluation signals are:
+
+- expected-fact hit counts across repeated runs
+- forbidden-fact violation detection
+- per-case pass/fail and process exit status
+
+The harness does not currently measure retrieval precision, citation correctness, latency, or token cost reliably, so no benchmark values for those metrics are reported here. CI also validates Python compilation/imports, starts PostgreSQL and Qdrant, ingests the configured documentation through AI Grid, and then runs this same evaluator.
+
+Latest local run: 7/7 cases passed, with every expected fact observed in all 3/3 repetitions and the forbidden deprecated-model fact absent in all 3/3 repetitions. These results depend on the live AI Grid model and documentation APIs; reproduce them with the commands below rather than treating them as a static benchmark.
+
+### Reproduce CI Evaluation
+
+GitHub Actions requires `AI_GRID_API_KEY`, `AI_GRID_BASE_URL`, and `DEFAULT_MODEL_LABEL` repository secrets. Locally, provide those values in `.env`, then run:
+
+```bash
+docker compose up -d
+python -m backend.ingestion.run
+python -m backend.evaluation.run
+```
+
+The workflow uses Python 3.11 and the pinned `requirements.txt`; the `numpy` pin is compatible with that runtime.
 
 ## Known Limitations and Design Decisions
 
