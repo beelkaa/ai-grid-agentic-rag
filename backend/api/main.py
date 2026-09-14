@@ -2,8 +2,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
-from agent import chat_with_agent, stream_chat_with_agent
-from db import (
+from backend.core.agent import chat_with_agent, stream_chat_with_agent
+from backend.infrastructure.vector_store import create_collection_if_not_exists
+from backend.infrastructure.db import (
     init_db,
     create_tables,
     create_session,
@@ -12,7 +13,7 @@ from db import (
     list_sessions,
     session_exists,
 )
-from ingest_real_content import run_ingestion
+from backend.ingestion.run import run_ingestion
 
 app = FastAPI()
 
@@ -50,6 +51,7 @@ async def chat(request: ChatRequest):
 async def startup():
     await init_db()
     await create_tables()
+    create_collection_if_not_exists()
 
 @app.post("/ingest")
 async def ingest():

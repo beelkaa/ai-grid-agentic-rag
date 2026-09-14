@@ -1,11 +1,14 @@
 import asyncio
-from scraper import scrape_all, chunk_text, load_sources, generate_chunk_id
-from embeddings import get_embeddings
-from vector_store import add_documents
+from pathlib import Path
+
+from backend.ingestion.scraper import scrape_all, chunk_text, load_sources, generate_chunk_id
+from backend.infrastructure.embeddings import get_embeddings
+from backend.infrastructure.vector_store import add_documents
 
 
 async def run_ingestion():
-    sources = load_sources("config/sources.yaml")
+    sources_path = Path(__file__).resolve().parents[1] / "config" / "sources.yaml"
+    sources = load_sources(str(sources_path))
     docs = scrape_all(sources)
 
     all_chunks = []

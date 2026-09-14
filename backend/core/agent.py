@@ -2,11 +2,12 @@ import asyncio
 import httpx
 import os
 import json
+from pathlib import Path
 from dotenv import load_dotenv
-from embeddings import get_embeddings
-from vector_store import client
-from db import save_message, get_messages
-from config.loader import load_config
+from backend.infrastructure.embeddings import get_embeddings
+from backend.infrastructure.vector_store import client
+from backend.infrastructure.db import save_message, get_messages
+from backend.config.loader import load_config
 from typing import Any, Optional
 from collections.abc import AsyncIterator
 from qdrant_client.models import Filter, FieldCondition, MatchValue
@@ -16,7 +17,7 @@ from langfuse import Langfuse, observe as langfuse_observe
 
 load_dotenv()
 
-config = load_config("config/config.yaml")
+config = load_config(str(Path(__file__).resolve().parents[1] / "config" / "config.yaml"))
 
 _background_tasks: set[asyncio.Task] = set()
 
@@ -76,7 +77,10 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "list_available_models",
-            "description": "List the models currently available from the AI Grid API. Use this for questions asking which models are available, supported, or in the model catalog.",
+            "description": (
+                "List the models currently available from the AI Grid API. Use this only for questions asking which models are available, "
+                "supported, or in the model catalog. For model capabilities or pricing, use search_documents instead."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -85,6 +89,35 @@ TOOLS = [
         },
     },
 ]
+
+DEPRECATED_MODEL_NAMES = ("gpt oss 20b", "gpt-oss-120b")
+
+
+def _contains_deprecated_model_name(text: str) -> bool:
+    """Deterministic backstop: catches known stale/deprecated model names
+    even if the LLM-based reflect() judge misses them on a given run."""
+    normalized = text.lower()
+    return any(name in normalized for name in DEPRECATED_MODEL_NAMES)
+
+
+def _is_pricing_question(text: str) -> bool:
+    normalized = text.lower()
+    return any(term in normalized for term in (
+        "price", "pricing", "cost", "per token", "per million tokens",
+    ))
+
+
+def _tools_for_messages(messages: list[dict]) -> list[dict]:
+    latest_user_message = next(
+        (message["content"] for message in reversed(messages) if message.get("role") == "user"),
+        "",
+    )
+    if _is_pricing_question(latest_user_message):
+        return [
+            tool for tool in TOOLS
+            if tool["function"]["name"] != "list_available_models"
+        ]
+    return TOOLS
 
 @langfuse_observe()
 async def search_documents(query: str, category: Optional[str] = None) -> str:
@@ -159,7 +192,7 @@ async def reason(
                 "model": model,
                 "messages": messages,
                 "temperature": config.agent.temperature,
-                "tools": TOOLS,
+                "tools": _tools_for_messages(messages),
                 "tool_choice": "none" if force_final else "auto",
             },
             timeout=config.timeouts.http_seconds
@@ -194,7 +227,7 @@ async def stream_reason(
                 "model": model,
                 "messages": messages,
                 "temperature": config.agent.temperature,
-                "tools": TOOLS,
+                "tools": _tools_for_messages(messages),
                 "tool_choice": "none" if force_final else "auto",
                 "stream": True,
                 "stream_options": {"include_usage": True},
@@ -439,7 +472,9 @@ async def _check_answer_quality(
     """
     try:
         verdict = await reflect(question, context, answer, history, base_url, api_key, model)
-        if not verdict.get("sufficient"):
+        if _contains_deprecated_model_name(answer):
+            print("[streaming reflection] deterministic backstop caught deprecated model name")
+        elif not verdict.get("sufficient"):
             print(f"[streaming reflection] insufficient: {verdict.get('missing', '')}")
     except Exception as e:
         print(f"[streaming reflection] failed: {e}")
@@ -454,9 +489,18 @@ def _validated_answer(answer: str, verdict: dict) -> str:
 
 def _is_model_catalog_question(question: str) -> bool:
     normalized = question.lower()
-    return "model" in normalized and any(
-        term in normalized for term in ("available", "supported", "catalog", "list", "which")
+    catalog_phrases = (
+        "which models are available",
+        "which models do you support",
+        "what models are available",
+        "available models",
+        "models are available",
+        "supported models",
+        "models are supported",
+        "list of models",
+        "model catalog",
     )
+    return any(phrase in normalized for phrase in catalog_phrases)
 
 
 def _format_available_models(raw_models: str) -> str:
@@ -513,9 +557,9 @@ async def chat_with_agent(question: str, session_id: int) -> str:
     context = results["context"]
 
     verdict = await reflect(question, context, answer, history, base_url, api_key, model)
-    if not verdict.get("sufficient"):
+    if not verdict.get("sufficient") or _contains_deprecated_model_name(answer):
         print(f"[reflection] insufficient: {verdict.get('missing', '')}")
-        answer = _validated_answer(answer, verdict)
+        answer = _validated_answer(answer, {"sufficient": False})
 
     await save_message(session_id, "user", question)
     await save_message(session_id, "assistant", answer)
@@ -559,7 +603,6 @@ async def stream_chat_with_agent(question: str, session_id: int) -> AsyncIterato
     async for event in stream_agent(config.agent.max_iterations, messages, base_url, api_key, model):
         if event["type"] == "token":
             answer_parts.append(event["text"])
-            yield event["text"]
         else:
             completed = event
 
@@ -569,11 +612,19 @@ async def stream_chat_with_agent(question: str, session_id: int) -> AsyncIterato
 
     context = completed["context"] if completed else ""
 
+    search_iterations = completed.get("search_iterations", 0) if completed else 0
+    if search_iterations > 0:
+        verdict = await reflect(question, context, answer, history, base_url, api_key, model)
+        if not verdict.get("sufficient") or _contains_deprecated_model_name(answer):
+            answer = _validated_answer(answer, {"sufficient": False})
+        yield answer
+    else:
+        yield answer
+        task = asyncio.create_task(
+            _check_answer_quality(question, context, answer, history, base_url, api_key, model)
+        )
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
+
     await save_message(session_id, "user", question)
     await save_message(session_id, "assistant", answer)
-
-    task = asyncio.create_task(
-        _check_answer_quality(question, context, answer, history, base_url, api_key, model)
-    )
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)

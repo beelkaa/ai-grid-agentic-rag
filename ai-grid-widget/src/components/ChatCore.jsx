@@ -6,12 +6,14 @@ import '../App.css'
 
 marked.use(markedKatex({ throwOnError: false }))
 
-const documentationSuggestions = [
-  { label: 'Chat & agents', question: 'How do I build a chat assistant or agent with AI GRID?' },
-  { label: 'Search & RAG', question: 'How do AI GRID embeddings work for semantic search and RAG?' },
-  { label: 'OCR & documents', question: 'How can I use AI GRID for OCR and document processing?' },
-  { label: 'API security', question: 'What is the recommended secure way to integrate the AI GRID API?' },
-]
+function Icon({ name, size = 16 }) {
+  const paths = {
+    copy: <><rect x="5" y="5" width="7" height="8" rx="1" /><path d="M3 10V3.5a1 1 0 0 1 1-1h5" /></>,
+    refresh: <><path d="M12 6a4.5 4.5 0 0 0-7.8-1.3L3 6" /><path d="M3 3.5V6h2.5M4 10a4.5 4.5 0 0 0 7.8 1.3L13 10" /><path d="M13 12.5V10h-2.5" /></>,
+    send: <path d="M8 13V3M4.5 6.5 8 3l3.5 3.5" />,
+  }
+  return <svg className="icon" width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
+}
 
 function BrandMark({ small = false }) {
   return <span className={`brand-mark${small ? ' small' : ''}`} aria-hidden="true"><i /><i /><i /><i /></span>
@@ -51,23 +53,27 @@ function ResponseActions({ message, onRetry }) {
     window.setTimeout(() => setCopied(false), 1400)
   }
   return <div className="response-actions">
-    <button type="button" onClick={() => onRetry(message.question)} aria-label="Try again" title="Try again"><span>↻</span></button>
-    {!message.interrupted && <button type="button" onClick={copyResponse} aria-label="Copy response" title={copied ? 'Copied' : 'Copy response'}><span className={copied ? 'copied-icon' : 'copy-glyph'}>{copied ? '✓' : ''}</span></button>}
+    <button type="button" onClick={() => onRetry(message.question)} aria-label="Try again" title="Try again"><Icon name="refresh" /></button>
+    {!message.interrupted && <button type="button" onClick={copyResponse} aria-label="Copy response" title={copied ? 'Copied' : 'Copy response'}><span className={copied ? 'copied-icon' : ''}>{copied ? '✓' : <Icon name="copy" />}</span></button>}
   </div>
+}
+
+function Composer({ question, setQuestion, isThinking, sendQuestion, stopQuestion, handleKeyDown, centered = false }) {
+  return <form className={`composer${centered ? ' composer-centered' : ' composer-active'}`} onSubmit={sendQuestion}><textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleKeyDown} placeholder="Ask AI GRID Assistant..." rows="1" aria-label="Ask AI GRID Assistant" />{isThinking ? <button className="composer-action stop" type="button" onClick={stopQuestion} aria-label="Stop response" title="Stop response"><span /></button> : <button className="composer-action send" type="submit" disabled={!question.trim()} aria-label="Send message" title="Send message"><Icon name="send" size={17} /></button>}</form>
 }
 
 function ChatCore({ activeSessionId = null, history = null, onSessionCreated, headerActions = null }) {
   const [question, setQuestion] = useState('')
   const [isThinking, setIsThinking] = useState(false)
   const [sessionId, setSessionId] = useState(null)
-  const [messages, setMessages] = useState([{ role: 'assistant', content: 'Hello. I am the AI GRID Assistant. How can I help you explore the documentation?' }])
+  const [messages, setMessages] = useState([])
   const abortController = useRef(null)
   const skipSessionNotification = useRef(false)
   useEffect(() => {
     if (history === null) return
     skipSessionNotification.current = true
     setSessionId(activeSessionId)
-    setMessages(history.length ? history : [{ role: 'assistant', content: 'Hello. I am the AI GRID Assistant. How can I help you explore the documentation?' }])
+    setMessages(history)
   }, [activeSessionId, history])
   useEffect(() => {
     if (skipSessionNotification.current) {
@@ -159,18 +165,18 @@ function ChatCore({ activeSessionId = null, history = null, onSessionCreated, he
       sendQuestion(event)
     }
   }
+  const isNewChat = messages.length === 0
   return <>
-    <header className="window-header"><div className="identity"><BrandMark /><div><h1>AI GRID Assistant</h1><p><span className="status-dot" /> Ready when you are</p></div></div>{headerActions && <div className="window-controls">{headerActions}</div>}</header>
-    <div className="conversation" aria-live="polite">
-      <div className="conversation-intro"><span className="intro-line" /><span>AI GRID DOCUMENTATION</span><span className="intro-line" /></div>
+    <div className={`conversation ${isNewChat ? 'is-new-chat' : 'is-active-chat'}`} aria-live="polite">
+      <div className="conversation-toolbar">{headerActions && <div className="window-controls">{headerActions}</div>}</div>
       {messages.map((message, index) => <article className={`message ${message.role}`} key={message.id || `${message.role}-${index}`}>
         {message.role === 'assistant' && <BrandMark small />}
         {message.role === 'user' ? <div className="question-bubble">{message.content}</div> : <div className={`answer${message.error || message.interrupted ? ' error' : ''}`}><Markdown content={message.content} />{message.complete && message.question && <><div className="answer-meta">{message.interrupted ? 'Response interrupted' : `Responded in ${message.responseTime || '--'}s`}</div><ResponseActions message={message} onRetry={(retryQuestion) => sendQuestion(null, retryQuestion)} /></>}</div>}
       </article>)}
       {isThinking && <div className="thinking-row"><BrandMark small /><div className="thinking"><span /><span /><span /><b>Thinking</b></div></div>}
-      {messages.length === 1 && !isThinking && <div className="documentation-suggestions"><div className="suggestions-label">Explore AI GRID documentation</div><div className="suggestions-grid">{documentationSuggestions.map((suggestion) => <button type="button" key={suggestion.label} onClick={() => sendQuestion(null, suggestion.question)}><span>{suggestion.label}</span><b>→</b></button>)}</div></div>}
+      {isNewChat && !isThinking && <><section className="welcome-state" aria-labelledby="welcome-title"><div className="welcome-kicker">AI GRID Assistant</div><h2 id="welcome-title">Ask anything about the AI GRID platform.</h2></section><Composer question={question} setQuestion={setQuestion} isThinking={isThinking} sendQuestion={sendQuestion} stopQuestion={stopQuestion} handleKeyDown={handleKeyDown} centered /></>}
     </div>
-    <form className="composer" onSubmit={sendQuestion}><textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleKeyDown} placeholder="Ask AI GRID Assistant..." rows="1" aria-label="Ask AI GRID Assistant" />{isThinking ? <button className="composer-action stop" type="button" onClick={stopQuestion} aria-label="Stop response" title="Stop response"><span /></button> : <button className="composer-action send" type="submit" disabled={!question.trim()} aria-label="Send message" title="Send message">↑</button>}<div className="composer-note"><span>Based on AI GRID documentation, AI may make mistakes.</span><kbd>Enter</kbd></div></form>
+    {!isNewChat && <Composer question={question} setQuestion={setQuestion} isThinking={isThinking} sendQuestion={sendQuestion} stopQuestion={stopQuestion} handleKeyDown={handleKeyDown} />}
   </>
 }
 

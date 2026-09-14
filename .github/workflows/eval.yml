@@ -65,7 +65,7 @@ jobs:
           POSTGRES_DB: agentic_rag
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-        run: python ingest_real_content.py
+        run: python -m backend.ingestion.run
 
       - name: Run agent evaluation suite
         env:
@@ -77,4 +77,4 @@ jobs:
           POSTGRES_DB: agentic_rag
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-        run: python run_eval.py
+        run: python -m backend.evaluation.run

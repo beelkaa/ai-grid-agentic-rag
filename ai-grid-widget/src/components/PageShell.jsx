@@ -2,13 +2,31 @@ import { useEffect, useRef, useState } from 'react'
 import ChatCore from './ChatCore.jsx'
 import './PageShell.css'
 import './PageShellTheme.css'
+import './PageShellFix.css'
+
+function SidebarIcon({ open }) {
+  return <svg className="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="3" width="11" height="10" rx="1.5" /><path d="M6 3v10" />{open ? <path d="m4.2 8 1.3-1.3M4.2 8l1.3 1.3" /> : <path d="m11.8 8-1.3-1.3M11.8 8l1.3 1.3" />}</svg>
+}
+
+function ControlIcon({ name }) {
+  const paths = {
+    trash: <path d="M3 5.5h10M6 5.5V4h4v1.5m-6 0 .5 8h7l.5-8M7 7.5v4m2-4v4" />,
+    sun: <><circle cx="8" cy="8" r="2.5" /><path d="M8 2v1.2M8 12.8V14M2 8h1.2M12.8 8H14M3.8 3.8l.8.8M11.4 11.4l.8.8M12.2 3.8l-.8.8M4.6 11.4l-.8.8" /></>,
+    moon: <path d="M11.8 10.8A4.8 4.8 0 0 1 5.2 4.2 4.8 4.8 0 1 0 11.8 10.8z" />,
+  }
+  return <svg className="control-icon" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>
+}
+
+function BrandButton({ collapsed, onClick }) {
+  return <button className="sidebar-brand-button" type="button" onClick={onClick} aria-label={collapsed ? 'Expand sidebar' : 'AI GRID Assistant'} title={collapsed ? 'Expand sidebar' : undefined}><span className="brand-mark small" aria-hidden="true"><i /><i /><i /><i /></span><span className="sidebar-brand-copy"><strong>AI GRID</strong><small>Assistant workspace</small></span></button>
+}
 
 function PageShell() {
   const [sessions, setSessions] = useState([])
   const [activeSessionId, setActiveSessionId] = useState(null)
   const [history, setHistory] = useState(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [sidebarWidth, setSidebarWidth] = useState(220)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth <= 720)
+  const [sidebarWidth, setSidebarWidth] = useState(248)
   const [isDark, setIsDark] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const resizeState = useRef(null)
@@ -50,6 +68,14 @@ function PageShell() {
     refreshSessions().catch(() => {})
   }
 
+  async function deleteAllChats() {
+    if (!sessions.length || !window.confirm('Delete all chats?')) return
+    const responses = await Promise.all(sessions.map((session) => fetch(`/api/sessions/${session.id}`, { method: 'DELETE' })))
+    if (responses.some((response) => !response.ok)) return
+    setSessions([])
+    startNewChat()
+  }
+
   function startSidebarResize(event) {
     if (sidebarCollapsed) return
     event.preventDefault()
@@ -82,11 +108,11 @@ function PageShell() {
 
   return <main className={`page-stage page-theme${isResizing ? ' is-resizing' : ''}`} data-theme={isDark ? 'dark' : 'light'} style={{ '--sidebar-width': `${sidebarWidth}px` }}><section className="page-window" aria-label="AI GRID Assistant">
     <aside className={`session-sidebar${sidebarCollapsed ? ' collapsed' : ''}`} aria-label="Chat sessions">
+      <div className="sidebar-brand"><BrandButton collapsed={sidebarCollapsed} onClick={() => sidebarCollapsed && setSidebarCollapsed(false)} /><button className="sidebar-toggle" type="button" onClick={() => setSidebarCollapsed(true)} aria-label="Collapse sidebar" title="Collapse sidebar"><SidebarIcon open /></button></div>
       <div className="sidebar-header">
-        <button className="new-chat-button" type="button" onClick={startNewChat}><span aria-hidden="true">+</span> New chat</button>
-        <button className="sidebar-toggle" type="button" onClick={() => setSidebarCollapsed(true)} aria-label="Collapse sidebar" title="Collapse sidebar"><span aria-hidden="true">‹</span></button>
+        <button className="new-chat-button" type="button" onClick={startNewChat}><span className="new-chat-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3.5 12.5h2l6.3-6.3-2-2-6.3 6.3zM8.9 4.1l2 2M3.5 12.5l.4-2.1" /></svg></span><span className="new-chat-label">New chat</span></button>
       </div>
-      <div className="session-list">
+      <div className="session-heading">Recent conversations</div><div className="session-list">
         {sessions.map((session) => <div className={`session-row${session.id === activeSessionId ? ' active' : ''}`} key={session.id}>
           <button className="session-select" type="button" onClick={() => selectSession(session.id)} title={session.title}>{session.title}</button>
           <button className="session-delete" type="button" onClick={(event) => removeSession(event, session.id)} aria-label={`Delete ${session.title}`} title="Delete session"><span aria-hidden="true">×</span></button>
@@ -94,7 +120,7 @@ function PageShell() {
       </div>
       <div className="sidebar-resize-handle" role="separator" aria-label="Resize sidebar" onPointerDown={startSidebarResize} />
     </aside>
-    <div className={`chat-panel${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}><ChatCore activeSessionId={activeSessionId} history={history} onSessionCreated={handleSessionCreated} headerActions={<><button className="theme-toggle header-theme-toggle" type="button" onClick={() => setIsDark((current) => !current)} aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'} title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}><span aria-hidden="true">{isDark ? '☀' : '☾'}</span></button>{sidebarCollapsed && <button className="sidebar-expand" type="button" onClick={() => setSidebarCollapsed(false)} aria-label="Expand sidebar" title="Expand sidebar"><span aria-hidden="true">›</span></button>}</>} /></div>
+    <div className={`chat-panel${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}><ChatCore activeSessionId={activeSessionId} history={history} onSessionCreated={handleSessionCreated} headerActions={<><button className="delete-all-button" type="button" onClick={deleteAllChats} disabled={!sessions.length} aria-label="Delete all chats" title="Delete all chats"><ControlIcon name="trash" /></button><button className="theme-toggle header-theme-toggle" type="button" onClick={() => setIsDark((current) => !current)} aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'} title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}><ControlIcon name={isDark ? 'sun' : 'moon'} /></button></>} /></div>
   </section></main>
 }
 

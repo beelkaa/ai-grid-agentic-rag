@@ -41,24 +41,22 @@ Both are needed because testing showed that the LLM judge is usually reliable bu
 
 ```text
 .
-├── agent.py                    # Tools, ReAct loop, reflection, and chat entry points
-├── db.py                       # PostgreSQL pool, sessions, and message persistence
-├── embeddings.py               # AI Grid embedding API client
-├── ingest_real_content.py      # Scrape, embed, and upsert configured documentation
-├── main.py                     # FastAPI routes and startup initialization
-├── scraper.py                  # Source loading, HTML extraction, chunking, and IDs
-├── vector_store.py              # Qdrant client, collection creation, and upserts
-├── run_eval.py                 # Repeated evaluation cases and process exit status
+├── backend/
+│   ├── api/main.py             # FastAPI routes and startup initialization
+│   ├── core/agent.py           # Tools, ReAct loop, reflection, and chat entry points
+│   ├── infrastructure/
+│   │   ├── db.py               # PostgreSQL pool, sessions, and message persistence
+│   │   ├── embeddings.py       # AI Grid embedding API client
+│   │   └── vector_store.py     # Qdrant client, collection creation, and upserts
+│   ├── ingestion/
+│   │   ├── scraper.py          # Source loading, HTML extraction, chunking, and IDs
+│   │   └── run.py              # Scrape, embed, and upsert configured documentation
+│   ├── evaluation/run.py       # Repeated evaluation cases and process exit status
+│   ├── config/                 # Backend settings and documentation sources
+│   └── prompt/system.txt       # Grounding, search, identity, and safety policy
 ├── requirements.txt             # Pinned Python dependencies
 ├── docker-compose.yml           # PostgreSQL and Qdrant services
 ├── .env.example                # Backend environment variable template
-├── config/
-│   ├── config.yaml             # Models, agent limits, retrieval, and timeouts
-│   ├── categories.yaml          # Retrieval category definitions
-│   ├── sources.yaml             # AI Grid URLs to ingest
-│   └── loader.py                # Pydantic-backed YAML loader
-├── prompt/
-│   └── system.txt              # Grounding, search, identity, and safety policy
 ├── ai-grid-widget/
 │   ├── src/
 │   │   ├── App.jsx              # Public shell exports
@@ -100,7 +98,7 @@ Both are needed because testing showed that the LLM judge is usually reliable bu
 - Docker and Docker Compose
 - Node.js and npm
 - An AI Grid API key with access to chat completions, embeddings, and models
-- Network access to the URLs in `config/sources.yaml`
+- Network access to the URLs in `backend/config/sources.yaml`
 
 ### Environment
 
@@ -110,7 +108,7 @@ Copy `.env.example` to `.env` in the repository root and fill in the AI Grid val
 cp .env.example .env
 ```
 
-Required variables are `AI_GRID_API_KEY`, `AI_GRID_BASE_URL`, `DEFAULT_MODEL_LABEL`, and the `POSTGRES_*` connection settings. `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` are optional tracing settings. The base URL is used with `/chat/completions`, `/embeddings`, and `/models`; do not duplicate those paths. Qdrant is currently fixed to `localhost:6333` in `vector_store.py`, and the embedding model is fixed in `embeddings.py`.
+Required variables are `AI_GRID_API_KEY`, `AI_GRID_BASE_URL`, `DEFAULT_MODEL_LABEL`, and the `POSTGRES_*` connection settings. `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` are optional tracing settings. The base URL is used with `/chat/completions`, `/embeddings`, and `/models`; do not duplicate those paths. Backend runtime settings, source URLs, and prompts are grouped under `backend/config/` and `backend/prompt/`.
 
 The current model and pricing evaluation cases cover `Qwen3-30B-A3B-Thinking`, `google/gemma-4-31B`, `Qwen/Qwen3.8-27B`, `meta-models/Muse-Glimmer-30B`, `deepseek-ocr`, and `zai-org/GLM-OCR`. The live catalog is obtained from AI Grid rather than maintained as a second hard-coded list.
 
@@ -130,22 +128,22 @@ Compose exposes PostgreSQL on `localhost:5432` and Qdrant on `localhost:6333`. I
 With the services and environment available, either start the backend and call:
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --reload
 curl -X POST http://localhost:8000/ingest
 ```
 
 or run ingestion directly:
 
 ```bash
-python ingest_real_content.py
+python -m backend.ingestion.run
 ```
 
-Ingestion loads `config/sources.yaml`, fetches each page, removes common navigation/script/style/footer content, groups paragraphs into chunks of about 800 characters, embeds each chunk, and upserts successful chunks into `documents`. Failed embedding requests are logged and skipped.
+Ingestion loads `backend/config/sources.yaml`, fetches each page, removes common navigation/script/style/footer content, groups paragraphs into chunks of about 800 characters, embeds each chunk, and upserts successful chunks into `documents`. Failed embedding requests are logged and skipped.
 
 ### Backend API
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 The API is at `http://localhost:8000`; interactive documentation is at `/docs`.
@@ -186,12 +184,12 @@ npm run preview
 
 ## How the Agent Works
 
-For a normal question, the backend loads the session messages from PostgreSQL, prepends `prompt/system.txt`, and calls the configured `DEFAULT_MODEL_LABEL` with `tool_choice: "auto"`.
+For a normal question, the backend loads the session messages from PostgreSQL, prepends `backend/prompt/system.txt`, and calls the configured `DEFAULT_MODEL_LABEL` with `tool_choice: "auto"`.
 
 - The model can answer from the conversation for greetings, small talk, or suitable follow-ups.
 - Documentation questions use `search_documents`, which embeds the query, searches Qdrant, optionally filters by `company`, `getting-started`, `models`, or `pricing`, and returns text with source URLs.
 - A model-catalog question is recognized by `_is_model_catalog_question()` and bypasses retrieval. The backend calls AI Grid `/models` and formats the live IDs. Pricing questions remove `list_available_models` from the tool set so pricing is retrieved from documentation instead of confused with catalog membership.
-- The ReAct loop can execute up to `agent.max_iterations` searches (5 in `config/config.yaml`). If it reaches the limit, a final call uses `tool_choice: "none"`.
+- The ReAct loop can execute up to `agent.max_iterations` searches (5 in `backend/config/config.yaml`). If it reaches the limit, a final call uses `tool_choice: "none"`.
 - The non-streaming path runs blocking `reflect()` and then the deterministic backstop before saving and returning the answer.
 - The streaming path buffers the model output internally. If retrieval happened (`search_iterations > 0`), it runs the same blocking safety gate before yielding the answer, sacrificing token-by-token display for grounded-answer verification. For small talk and simple follow-ups with no search, it yields immediately and schedules a background observational `reflect()` check; this preserves responsiveness because those answers do not depend on newly retrieved documents. The deterministic deprecated-name backstop still applies to the blocking path.
 - Obvious weather, sports, cooking, and restaurant questions are rejected early in the streaming path.
@@ -216,7 +214,7 @@ Run the harness from the repository root after starting PostgreSQL, Qdrant, inge
 
 ```bash
 source venv/bin/activate
-python run_eval.py
+python -m backend.evaluation.run
 ```
 
 `run_eval.py` runs seven cases three times each by default. Cases cover OCR/image handling, current model capabilities and comparisons, refund-policy uncertainty, exact pricing, multi-model recommendations, and the deprecated-model regression. `score_answer()` uses case-insensitive substring matching. An expected fact can be a tuple of acceptable alternative phrases, and forbidden facts must never appear.
@@ -245,7 +243,7 @@ Resolved engineering issues:
 
 ## Credits and Context
 
-This project is a focused AI Grid documentation assistant. Its source corpus is configured in `config/sources.yaml` and is fetched from official AI Grid pages. AI Grid provides the hosted inference, embedding, and live model-catalog APIs; Qdrant and PostgreSQL provide local retrieval and session persistence. See [ai-grid-widget/FRONTEND_DOCUMENTATION.md](ai-grid-widget/FRONTEND_DOCUMENTATION.md) for frontend-specific operation and deployment notes.
+This project is a focused AI Grid documentation assistant. Its source corpus is configured in `backend/config/sources.yaml` and is fetched from official AI Grid pages. AI Grid provides the hosted inference, embedding, and live model-catalog APIs; Qdrant and PostgreSQL provide local retrieval and session persistence. See [ai-grid-widget/FRONTEND_DOCUMENTATION.md](ai-grid-widget/FRONTEND_DOCUMENTATION.md) for frontend-specific operation and deployment notes.
 
 To stop local services while preserving their persistent data:
 

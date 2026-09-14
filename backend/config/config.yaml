@@ -7,7 +7,7 @@ model:
 agent:
   temperature: 0.2
   max_iterations: 5
-  system_prompt_path: prompt/system.txt
+  system_prompt_path: backend/prompt/system.txt
 
 retrieval:
   collection_name: documents

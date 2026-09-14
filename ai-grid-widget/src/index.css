@@ -2,5 +2,5 @@
 :root { --sans: 'DM Sans', 'Segoe UI', sans-serif; --heading: 'Manrope', 'DM Sans', 'Segoe UI', sans-serif; --mono: 'SFMono-Regular', Consolas, monospace; font: 16px/1.45 var(--sans); color: #5e566a; background: #fbfaff; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; margin: 0; padding: 0; }
-body { min-width: 320px; background: radial-gradient(circle at 78% 14%, rgba(218, 204, 255, .42), transparent 31%), linear-gradient(135deg, #fff 0%, #fbfaff 52%, #f4effd 100%); }
+body { min-width: 320px; background: #fbfaff; }
 button, textarea { font-family: inherit; }
