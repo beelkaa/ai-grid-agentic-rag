@@ -1,0 +1,80 @@
+name: Agent Evaluation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  run-eval:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: agentic_rag
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Wait for Qdrant to be ready
+        run: |
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:6333/healthz; then
+              echo "Qdrant is up"
+              exit 0
+            fi
+            echo "Waiting for Qdrant..."
+            sleep 2
+          done
+          echo "Qdrant did not become ready in time"
+          exit 1
+
+      - name: Create Qdrant collection and ingest documentation
+        env:
+          AI_GRID_API_KEY: ${{ secrets.AI_GRID_API_KEY }}
+          AI_GRID_BASE_URL: ${{ secrets.AI_GRID_BASE_URL }}
+          DEFAULT_MODEL_LABEL: ${{ secrets.DEFAULT_MODEL_LABEL }}
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: agentic_rag
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        run: python ingest_real_content.py
+
+      - name: Run agent evaluation suite
+        env:
+          AI_GRID_API_KEY: ${{ secrets.AI_GRID_API_KEY }}
+          AI_GRID_BASE_URL: ${{ secrets.AI_GRID_BASE_URL }}
+          DEFAULT_MODEL_LABEL: ${{ secrets.DEFAULT_MODEL_LABEL }}
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: agentic_rag
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        run: python run_eval.py
