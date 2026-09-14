@@ -1,175 +1,162 @@
 # AI Grid Agentic RAG Assistant
 
-A custom agentic RAG assistant for AI Grid documentation, with a FastAPI backend, Qdrant retrieval, PostgreSQL conversation history, and a React/Vite chat widget.
+An agentic RAG assistant for official AI Grid documentation, with a FastAPI backend, Qdrant retrieval, PostgreSQL conversation history, and React/Vite chat shells.
 
 ## Architecture Overview
 
-The assistant implements a ReAct loop directly in `agent.py`; it does not use LangChain or LangGraph.
+The backend in `agent.py` implements a hand-written ReAct loop. It does not use LangChain or LangGraph.
 
-1. **Reason**: the hosted AI Grid LLM receives the system prompt and conversation history. It decides whether to answer immediately or request a tool call.
-2. **Act**: the backend executes the requested tool. The available tools are `search_documents` for semantic retrieval and `list_available_models` for the live model catalog.
-3. **Observe**: the tool result is appended to the conversation as a tool message linked to the original tool call.
-4. **Reflect**: after the non-streaming agent run, a separate model call reviews the draft answer against the retrieved context and recent conversation.
+1. **Reason**: the AI Grid chat model receives the system prompt and conversation history and chooses whether to answer or call a tool.
+2. **Act**: the backend runs `search_documents` for semantic documentation retrieval or `list_available_models` for the live model catalog.
+3. **Observe**: the tool result is appended as a tool message, linked to the model's tool call, and the loop continues.
+4. **Reflect**: a separate model call judges whether the draft is complete, relevant, and grounded in the retrieved documentation and recent conversation.
 
-The reflection step is a strict sufficiency gate. It returns structured JSON with `sufficient` and `missing` fields. If the answer is not sufficiently grounded, the backend replaces it with a fixed message saying that the official documentation does not contain enough information. The agent is limited to the configured maximum number of iterations and forces a final answer if that limit is reached.
+### Two-tier answer safety
 
-> **Streaming note:** the `/chat` endpoint normally uses `stream_chat_with_agent`, which streams the final model output. The current streaming path does not call `reflect()`; the reflection gate is applied by `chat_with_agent` when the backend falls back to its non-streaming response path.
+The answer gate has two independent checks:
+
+- `reflect()` is an LLM judge. It returns structured JSON with `sufficient` and `missing`, and catches incomplete, unsupported, irrelevant, or ambiguous answers.
+- `_contains_deprecated_model_name()` is a deterministic backstop for known stale names, currently `gpt oss 20b` and `gpt-oss-120b`.
+
+Both are needed because testing showed that the LLM judge is usually reliable but not deterministic. The backstop guarantees that a known-bad deprecated model name cannot reach a user if `reflect()` has an off run. This matters in practice: current AI Grid pricing/plans documentation still contains a retired model name as a quota label, while that model's dedicated documentation page returns 404. An unsafe or insufficient answer is replaced with a fixed documentation-insufficiency response.
 
 ## Tech Stack
 
-| Component | Tool or library |
+| Area | Implementation |
 | --- | --- |
-| API server | FastAPI, Uvicorn |
-| Agent orchestration | Hand-written Python ReAct loop in `agent.py` |
-| Hosted inference | AI Grid OpenAI-compatible chat completions API |
-| Embeddings | AI Grid embeddings API using `Alibaba-NLP/gte-Qwen2-7B-instruct` |
-| Vector database | Qdrant (`qdrant-client`) |
-| Relational database | PostgreSQL 16 with `asyncpg` |
-| Retrieval | Cosine similarity, top 5 configured results, optional category filter |
-| Web scraping and chunking | `requests`, BeautifulSoup, YAML source configuration |
-| Observability | Langfuse tracing and generation usage reporting |
-| Backend configuration | YAML with Pydantic validation, `python-dotenv` |
-| Frontend | React 19, Vite 8 |
-| Frontend rendering | `marked`, KaTeX, `marked-katex-extension` |
-| Frontend linting | Oxlint |
-| Evaluation | `run_eval.py`, keyword-based expected/forbidden fact checks |
+| API | FastAPI and Uvicorn |
+| Agent | Hand-written Python ReAct loop |
+| Inference | AI Grid OpenAI-compatible chat completions, embeddings, and model-list APIs |
+| Embeddings | `Alibaba-NLP/gte-Qwen2-7B-instruct`, 3584 dimensions |
+| Vector store | Qdrant with cosine similarity and configurable top-k retrieval |
+| Session store | PostgreSQL 16 with `asyncpg` |
+| Ingestion | `requests`, BeautifulSoup, YAML sources, deterministic UUID chunk IDs |
+| Observability | Langfuse tracing and token usage reporting |
+| Frontend | React 19 and Vite 8 |
+| Rendering | `marked`, `marked-katex-extension`, and KaTeX |
+| Frontend checks | Oxlint |
+| Evaluation | Repeated keyword-based expected/forbidden fact checks |
 
 ## Project Structure
 
 ```text
 .
-├── agent.py                    # Tools, ReAct loop, reflection, chat entry points
+├── agent.py                    # Tools, ReAct loop, reflection, and chat entry points
 ├── db.py                       # PostgreSQL pool, sessions, and message persistence
 ├── embeddings.py               # AI Grid embedding API client
-├── ingest_real_content.py      # Scrape, chunk, embed, and upsert documentation
-├── main.py                     # FastAPI /chat and /ingest endpoints
-├── scraper.py                  # Source loading, HTML extraction, and chunking
-├── vector_store.py             # Qdrant client, collection, and document upserts
-├── run_eval.py                 # Repeated evaluation cases and fact scoring
+├── ingest_real_content.py      # Scrape, embed, and upsert configured documentation
+├── main.py                     # FastAPI routes and startup initialization
+├── scraper.py                  # Source loading, HTML extraction, chunking, and IDs
+├── vector_store.py              # Qdrant client, collection creation, and upserts
+├── run_eval.py                 # Repeated evaluation cases and process exit status
 ├── requirements.txt             # Pinned Python dependencies
 ├── docker-compose.yml           # PostgreSQL and Qdrant services
+├── .env.example                # Backend environment variable template
 ├── config/
 │   ├── config.yaml             # Models, agent limits, retrieval, and timeouts
 │   ├── categories.yaml          # Retrieval category definitions
-│   ├── sources.yaml             # Documentation URLs to ingest
+│   ├── sources.yaml             # AI Grid URLs to ingest
 │   └── loader.py                # Pydantic-backed YAML loader
 ├── prompt/
-│   └── system.txt              # Grounding, search, safety, and response policy
+│   └── system.txt              # Grounding, search, identity, and safety policy
 ├── ai-grid-widget/
-│   ├── src/App.jsx              # Chat UI, streaming, retry, stop, and copy actions
-│   ├── src/App.css              # Widget styling and responsive layout
-│   ├── src/index.css             # Global styles and fonts
-│   ├── src/main.jsx              # React entry point
-│   ├── public/                  # Static icons and favicon
+│   ├── src/
+│   │   ├── App.jsx              # Public shell exports
+│   │   ├── App.css              # Shared chat styling
+│   │   ├── index.css            # Global styles and fonts
+│   │   ├── main.jsx             # PageShell application entry point
+│   │   ├── assets/
+│   │   │   ├── hero.png
+│   │   │   ├── react.svg
+│   │   │   └── vite.svg
+│   │   └── components/
+│   │       ├── ChatCore.jsx     # Shared streaming chat, Markdown, and actions
+│   │       ├── PageShell.jsx    # Standalone app with session sidebar
+│   │       ├── PageShell.css
+│   │       ├── PageShellFix.css
+│   │       ├── PageShellTheme.css
+│   │       ├── WidgetShell.jsx  # Compact embeddable shell
+│   │       └── WidgetShell.css
+│   ├── public/
+│   │   ├── favicon.svg
+│   │   └── icons.svg
 │   ├── package.json             # Frontend scripts and dependencies
 │   ├── vite.config.js           # /api proxy to FastAPI
-│   └── FRONTEND_DOCUMENTATION.md # Frontend setup and integration notes
-├── scratch/                    # Small manual API and integration experiments
-├── qdrant_storage/             # Local Qdrant data, ignored by Git
-└── postgres_data/              # Local database data, ignored by Git
+│   └── FRONTEND_DOCUMENTATION.md
+└── scratch/
+	├── list_models.py
+	├── test_embed.py
+	├── test_qdrant.py
+	└── test_tool_call.py
 ```
+
+`qdrant_storage/`, `postgres_data/`, `node_modules/`, and build output are runtime or generated data, not source required in a fresh checkout.
 
 ## Setup
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.10 or newer
 - Docker and Docker Compose
 - Node.js and npm
-- An AI Grid API key with access to chat completions and embeddings
-- Network access to the configured AI Grid documentation URLs for ingestion
+- An AI Grid API key with access to chat completions, embeddings, and models
+- Network access to the URLs in `config/sources.yaml`
 
-### Environment variables
+### Environment
 
-There is currently no `.env.example` file. Create a `.env` file in the project root. The backend loads it with `python-dotenv`.
+Copy `.env.example` to `.env` in the repository root and fill in the AI Grid values:
 
-```dotenv
-# Required hosted AI Grid inference settings
-AI_GRID_API_KEY=your-ai-grid-api-key
-AI_GRID_BASE_URL=https://your-ai-grid-api-base-url
-DEFAULT_MODEL_LABEL=Qwen/Qwen3.8-27B
-
-# Required PostgreSQL connection settings
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=agentic_rag
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-
-# Optional Langfuse tracing settings
-LANGFUSE_PUBLIC_KEY=
-LANGFUSE_SECRET_KEY=
-LANGFUSE_HOST=
+```bash
+cp .env.example .env
 ```
 
-`AI_GRID_BASE_URL` should be the API base URL used by the project, without a duplicated path. The code appends `/chat/completions`, `/embeddings`, and `/models` to it. `DEFAULT_MODEL_LABEL` controls chat inference; the embedding model is currently fixed in `embeddings.py`. Qdrant is currently configured directly as `localhost:6333` in `vector_store.py`, so it has no environment variable in the current implementation.
+Required variables are `AI_GRID_API_KEY`, `AI_GRID_BASE_URL`, `DEFAULT_MODEL_LABEL`, and the `POSTGRES_*` connection settings. `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` are optional tracing settings. The base URL is used with `/chat/completions`, `/embeddings`, and `/models`; do not duplicate those paths. Qdrant is currently fixed to `localhost:6333` in `vector_store.py`, and the embedding model is fixed in `embeddings.py`.
 
-### Install Python dependencies
+The current model and pricing evaluation cases cover `Qwen3-30B-A3B-Thinking`, `google/gemma-4-31B`, `Qwen/Qwen3.8-27B`, `meta-models/Muse-Glimmer-30B`, `deepseek-ocr`, and `zai-org/GLM-OCR`. The live catalog is obtained from AI Grid rather than maintained as a second hard-coded list.
+
+### Install and start services
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
-
-### Start PostgreSQL and Qdrant
-
-From the repository root:
-
-```bash
 docker compose up -d
-docker compose ps
 ```
 
-The compose file exposes PostgreSQL on `localhost:5432` and Qdrant on `localhost:6333`. PostgreSQL uses the values in `.env`, or these compose defaults:
+Compose exposes PostgreSQL on `localhost:5432` and Qdrant on `localhost:6333`. Its PostgreSQL defaults are `agentic_rag` / `postgres` / `postgres` unless overridden by the compose environment. The FastAPI startup hook creates the PostgreSQL tables and creates the Qdrant `documents` collection if it does not exist, so a fresh clone no longer needs a manual collection bootstrap.
 
-- Database: `agentic_rag`
-- User: `postgres`
-- Password: `postgres`
+### Ingest documentation
 
-Useful health checks:
-
-```bash
-curl http://localhost:6333/healthz
-docker compose exec -T postgres pg_isready -U postgres -d agentic_rag
-```
-
-### Prepare the vector collection and ingest documentation
-
-The configured sources are in `config/sources.yaml`. Ingestion fetches each page, removes common non-content HTML elements, chunks text into approximately 800-character pieces, generates embeddings through AI Grid, and upserts the chunks into the `documents` Qdrant collection.
-
-The current code expects the `documents` collection to already exist. If it is not already present in your Qdrant data, create it with the configured 3584-dimensional cosine vector settings before running ingestion, or call the existing `create_collection_if_not_exists()` helper from a setup script.
-
-With the backend dependencies active, start FastAPI and call the ingestion endpoint:
+With the services and environment available, either start the backend and call:
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 curl -X POST http://localhost:8000/ingest
 ```
 
-Alternatively, run the ingestion module directly:
+or run ingestion directly:
 
 ```bash
 python ingest_real_content.py
 ```
 
-### Start the backend
+Ingestion loads `config/sources.yaml`, fetches each page, removes common navigation/script/style/footer content, groups paragraphs into chunks of about 800 characters, embeds each chunk, and upserts successful chunks into `documents`. Failed embedding requests are logged and skipped.
+
+### Backend API
 
 ```bash
-source venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The API is available at `http://localhost:8000`. Interactive API documentation is at `http://localhost:8000/docs`.
+The API is at `http://localhost:8000`; interactive documentation is at `/docs`.
 
-The main endpoints are:
+- `POST /chat` accepts `{"question": "...", "session_id": 123}`. Omitting `session_id` creates a session. Normal responses are streamed as `text/plain` and include `X-Session-Id`; if streaming cannot start, the route falls back to JSON containing `answer` and `session_id`.
+- `POST /ingest` runs the configured ingestion job.
+- Session routes are described in [Session Management](#session-management).
 
-- `POST /chat` with `{"question": "...", "session_id": 123}`. Omit `session_id` to create a new PostgreSQL session. Normal responses stream as `text/plain` and include `X-Session-Id`; startup failures can fall back to JSON with `answer` and `session_id`.
-- `POST /ingest` to scrape and index the configured sources.
+### Frontend
 
-### Start the React widget
-
-In a separate terminal:
+The Vite development proxy rewrites `/api/*` to `http://localhost:8000/*`.
 
 ```bash
 cd ai-grid-widget
@@ -177,66 +164,91 @@ npm install
 npm run dev -- --host 0.0.0.0
 ```
 
-Open `http://localhost:5173/`. Vite proxies `/api/*` to the backend, so the widget sends `/api/chat` to FastAPI's `/chat` endpoint.
+Open `http://localhost:5173/`. `main.jsx` renders `PageShell`, the standalone primary app. `PageShell` includes the resizable/collapsible history sidebar, new-chat flow, delete controls, and light/dark mode. `WidgetShell` remains available for a compact embeddable or full-screen shell:
 
-Frontend checks and production build:
+```jsx
+import { WidgetShell } from './src/App.jsx'
+
+export default function EmbeddedAssistant() {
+	return <WidgetShell />
+}
+```
+
+Both shells use `ChatCore` for streaming, Markdown/KaTeX rendering, retry, copy, stop, and session-aware chat behavior. The frontend never receives backend credentials.
+
+Frontend commands:
 
 ```bash
-cd ai-grid-widget
 npm run lint
 npm run build
 npm run preview
 ```
 
-The production bundle is generated in `ai-grid-widget/dist/`. See [ai-grid-widget/FRONTEND_DOCUMENTATION.md](ai-grid-widget/FRONTEND_DOCUMENTATION.md) for iframe integration notes and additional troubleshooting commands.
-
 ## How the Agent Works
 
-For a normal documentation question, `chat_with_agent()` loads the session's recent messages from PostgreSQL and prepends `prompt/system.txt`. It then calls the configured AI Grid chat model with the available tools and `tool_choice: "auto"`.
+For a normal question, the backend loads the session messages from PostgreSQL, prepends `prompt/system.txt`, and calls the configured `DEFAULT_MODEL_LABEL` with `tool_choice: "auto"`.
 
-- If the model can answer from the conversation, it can return text directly.
-- If the question needs AI Grid-specific facts, the system prompt tells it to request `search_documents`. The tool embeds the query, searches Qdrant, optionally filters by `company`, `getting-started`, `models`, or `pricing`, and returns text with source URLs.
-- For questions asking which models are available or supported, `_is_model_catalog_question()` bypasses the ReAct loop and calls the AI Grid `/models` endpoint directly, then formats the returned IDs.
-- The model can search repeatedly, up to `agent.max_iterations` (5 by default). If the limit is reached, the backend makes a final model call with `tool_choice: "none"`.
-- In the non-streaming path, `reflect()` checks completeness, grounding, unsupported names, and off-topic content. An insufficient verdict rejects the draft and returns the fixed documentation-insufficiency response.
-- The streaming path exposes only final answer text to the widget and persists the completed exchange to PostgreSQL. Obvious off-topic questions are rejected early in that path.
+- The model can answer from the conversation for greetings, small talk, or suitable follow-ups.
+- Documentation questions use `search_documents`, which embeds the query, searches Qdrant, optionally filters by `company`, `getting-started`, `models`, or `pricing`, and returns text with source URLs.
+- A model-catalog question is recognized by `_is_model_catalog_question()` and bypasses retrieval. The backend calls AI Grid `/models` and formats the live IDs. Pricing questions remove `list_available_models` from the tool set so pricing is retrieved from documentation instead of confused with catalog membership.
+- The ReAct loop can execute up to `agent.max_iterations` searches (5 in `config/config.yaml`). If it reaches the limit, a final call uses `tool_choice: "none"`.
+- The non-streaming path runs blocking `reflect()` and then the deterministic backstop before saving and returning the answer.
+- The streaming path buffers the model output internally. If retrieval happened (`search_iterations > 0`), it runs the same blocking safety gate before yielding the answer, sacrificing token-by-token display for grounded-answer verification. For small talk and simple follow-ups with no search, it yields immediately and schedules a background observational `reflect()` check; this preserves responsiveness because those answers do not depend on newly retrieved documents. The deterministic deprecated-name backstop still applies to the blocking path.
+- Obvious weather, sports, cooking, and restaurant questions are rejected early in the streaming path.
 
-The assistant is grounded by `prompt/system.txt`, which instructs it to use official AI Grid documentation, separate facts from recommendations, cover multi-part questions, and avoid inventing unsupported information.
+The system prompt requires official-document grounding, focused iterative retrieval, coverage of multi-part questions, explicit uncertainty, and safe handling of retrieved text as data.
+
+## Session Management
+
+Each chat gets a PostgreSQL session. `PageShell` loads recent conversations into its sidebar, fetches a selected session's messages, and can start a new chat or delete one. The sidebar can be collapsed and manually resized; all chat behavior remains in `ChatCore`.
+
+The backend exposes:
+
+| Route | Purpose |
+| --- | --- |
+| `GET /sessions` | List sessions with IDs, first-user-message titles, and last-update timestamps |
+| `GET /sessions/{id}/messages` | Load ordered messages; returns 404 for an unknown session |
+| `DELETE /sessions/{id}` | Delete the session and its messages transactionally; returns 404 when absent |
 
 ## Running Evaluations
 
-`run_eval.py` initializes PostgreSQL and runs seven representative questions. Each case is executed three times by default (`RUNS_PER_QUESTION = 3`) to expose inconsistent answers.
-
-Run it from the repository root with the backend environment active and PostgreSQL, Qdrant, the `documents` collection, and the AI Grid API available:
+Run the harness from the repository root after starting PostgreSQL, Qdrant, ingesting documents, and configuring AI Grid:
 
 ```bash
 source venv/bin/activate
 python run_eval.py
 ```
 
-The cases cover OCR and image inputs, model capabilities and comparisons, refund-policy uncertainty, pricing, plan/model recommendations, and a forbidden model-name regression. `score_answer()` performs case-insensitive substring checks for expected facts and verifies that forbidden facts do not appear. The script prints every answer, each run's boolean fact scores, and a `hits/3` summary for every fact.
+`run_eval.py` runs seven cases three times each by default. Cases cover OCR/image handling, current model capabilities and comparisons, refund-policy uncertainty, exact pricing, multi-model recommendations, and the deprecated-model regression. `score_answer()` uses case-insensitive substring matching. An expected fact can be a tuple of acceptable alternative phrases, and forbidden facts must never appear.
 
-This is a lightweight behavioral harness, not a semantic evaluator. A passing keyword score does not prove that an answer is fully correct, well cited, or safe.
+The script prints each answer, per-run scores, and hit counts. `MIN_HIT_RATE = 1` means every expected fact must appear at least once across the three runs; a forbidden fact fails if it appears even once. It exits `0` only when every case passes and `1` when any case fails, so it can gate CI. A failure should be read from the case summary: identify the fact with fewer than the required hits, then inspect the printed answers to distinguish retrieval, model nondeterminism, grounding/reflection rejection, or an outdated expectation. This remains a lightweight behavioral check, not a semantic, citation, latency, or cost evaluator.
 
-## Known Limitations and Not Implemented
+## Known Limitations and Design Decisions
 
-- The agent orchestration is custom Python; LangChain and LangGraph are intentionally not used.
-- The streaming path currently skips `reflect()`, so the strict answer-sufficiency gate only applies to the non-streaming `chat_with_agent()` path.
-- Only the first tool call in a model response is executed, even if a response contains multiple tool calls.
-- Tool names and arguments are trusted from the model response; unknown tools or malformed JSON are not converted into user-friendly errors.
-- The embedding model is hard-coded in `embeddings.py`, while the chat model is selected with `DEFAULT_MODEL_LABEL`.
-- Qdrant connection details are hard-coded to `localhost:6333`, and collection creation is not wired into startup or ingestion.
-- Ingestion is synchronous in its scraping and upsert orchestration, has no scheduled refresh, and skips chunks whose embedding requests fail.
-- Scraped chunks are simple paragraph groups capped at approximately 800 characters; there is no reranking, deduplication policy, or document versioning.
-- PostgreSQL tables are created at startup, but there are no migrations, authentication, authorization, rate limits, or multi-tenant isolation.
-- The API has no explicit CORS configuration and is intended to be used locally or behind a properly configured reverse proxy.
-- Evaluation is based on substring presence/absence and does not measure retrieval precision, citation correctness, latency, or token cost.
-- API keys, database credentials, and Langfuse credentials must remain on the backend and must never be placed in the React frontend.
+- The custom Python ReAct orchestration is deliberate; LangChain and LangGraph are not dependencies.
+- Retrieval-based streaming answers are intentionally buffered until the blocking safety check finishes. This trades token-by-token display for preventing an unsupported answer from being shown. No-search small talk and simple follow-ups keep the faster background-check path.
+- Only the first tool call in a model response is executed. Unknown tools and malformed arguments are not converted into tailored user-facing errors.
+- The chat model comes from `DEFAULT_MODEL_LABEL`; the embedding model remains hard-coded in `embeddings.py`, even though model metadata also exists in YAML.
+- Qdrant is fixed to `localhost:6333`; the collection is now auto-created at FastAPI startup, but deployment configuration is still local-only.
+- Ingestion has no scheduler, refresh/versioning policy, reranking, or deduplication policy. It skips chunks whose embedding request fails.
+- PostgreSQL tables are created with `CREATE TABLE IF NOT EXISTS`, but there are no migrations, authentication, authorization, rate limits, or tenant isolation.
+- The API has no explicit CORS configuration and is intended for local use or a same-origin/properly configured reverse proxy.
+- Evaluation is substring-based and does not prove factual completeness, retrieval precision, citation correctness, latency, or token cost.
 
-## Stopping Services
+Resolved engineering issues:
+
+- The streaming route previously allowed retrieval-based text to reach the user without reflection. It now performs the blocking gate before yielding those answers, while preserving fast unblocked output for no-search interactions.
+- The LLM reflection judge was empirically found to be nondeterministic around a retired model name still present in live plan/quota documentation. The deterministic backstop now guarantees that known deprecated names are rejected.
+- The evaluation runner previously always exited successfully. It now returns process exit code `0` for a pass and `1` for a failure, and accepts alternative expected phrasings.
+- The `documents` collection previously had to exist before ingestion. FastAPI startup now calls `create_collection_if_not_exists()` for fresh clones.
+- The frontend was previously one widget-oriented shell. Shared `ChatCore`, standalone `PageShell`, and optional `WidgetShell` now separate the primary full-page experience from compact embedding.
+
+## Credits and Context
+
+This project is a focused AI Grid documentation assistant. Its source corpus is configured in `config/sources.yaml` and is fetched from official AI Grid pages. AI Grid provides the hosted inference, embedding, and live model-catalog APIs; Qdrant and PostgreSQL provide local retrieval and session persistence. See [ai-grid-widget/FRONTEND_DOCUMENTATION.md](ai-grid-widget/FRONTEND_DOCUMENTATION.md) for frontend-specific operation and deployment notes.
+
+To stop local services while preserving their persistent data:
 
 ```bash
 docker compose down
 ```
-
-This stops PostgreSQL and Qdrant containers. Their persistent data remains in the configured Docker volume and local `qdrant_storage/` directory unless those are removed separately.
