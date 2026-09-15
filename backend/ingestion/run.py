@@ -3,10 +3,12 @@ from pathlib import Path
 
 from backend.ingestion.scraper import scrape_all, chunk_text, load_sources, generate_chunk_id
 from backend.infrastructure.embeddings import get_embeddings
-from backend.infrastructure.vector_store import add_documents
+from backend.infrastructure.vector_store import add_documents, create_collection_if_not_exists
 
 
 async def run_ingestion():
+    create_collection_if_not_exists()
+
     sources_path = Path(__file__).resolve().parents[1] / "config" / "sources.yaml"
     sources = load_sources(str(sources_path))
     docs = scrape_all(sources)

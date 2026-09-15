@@ -124,7 +124,14 @@ async def search_documents(query: str, category: Optional[str] = None) -> str:
     question_vector = await get_embeddings(query)
 
     query_filter = None
-    if category:
+    if category == "pricing":
+        query_filter = Filter(
+            should=[
+                FieldCondition(key="category", match=MatchValue(value="pricing")),
+                FieldCondition(key="category", match=MatchValue(value="models")),
+            ]
+        )
+    elif category:
         query_filter = Filter(
             must=[FieldCondition(key="category", match=MatchValue(value=category))]
         )
