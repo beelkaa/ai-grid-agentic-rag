@@ -121,12 +121,20 @@ function ChatCore({ activeSessionId = null, history = null, onSessionCreated, he
       const reader = response.body?.getReader()
       if (!reader) throw new Error('The response did not include a readable stream.')
       const decoder = new TextDecoder()
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        if (!chunk) continue
-        answer += chunk
+      let pendingEvent = ''
+      function applyStreamEvent(event) {
+        if (!event) return
+        const dataLine = event.split('\n').find((line) => line.startsWith('data:'))
+        if (!dataLine) return
+        let streamEvent
+        try {
+          streamEvent = JSON.parse(dataLine.slice(5).trim())
+        } catch {
+          throw new Error('The response stream contained invalid data.')
+        }
+        if (streamEvent.type === 'replace') answer = streamEvent.text
+        else if (streamEvent.type === 'token') answer += streamEvent.text
+        else return
         if (!hasStartedStreaming) {
           hasStartedStreaming = true
           setIsThinking(false)
@@ -135,10 +143,17 @@ function ChatCore({ activeSessionId = null, history = null, onSessionCreated, he
           setMessages((currentMessages) => currentMessages.map((message) => message.id === messageId ? { ...message, content: answer } : message))
         }
       }
-      const trailingChunk = decoder.decode()
-      if (trailingChunk) {
-        answer += trailingChunk
-        setMessages((currentMessages) => currentMessages.map((message) => message.id === messageId ? { ...message, content: answer } : message))
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        pendingEvent += decoder.decode(value, { stream: true })
+        const events = pendingEvent.split('\n\n')
+        pendingEvent = events.pop() || ''
+        for (const event of events) applyStreamEvent(event)
+      }
+      pendingEvent += decoder.decode()
+      if (pendingEvent.trim()) {
+        for (const event of pendingEvent.split('\n\n')) applyStreamEvent(event)
       }
       if (!hasStartedStreaming) {
         answer = 'I received an empty response.'

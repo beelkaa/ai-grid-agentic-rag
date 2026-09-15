@@ -583,14 +583,14 @@ async def stream_chat_with_agent(question: str, session_id: int) -> AsyncIterato
 
     if _is_model_catalog_question(question):
         answer = _format_available_models(await list_available_models())
-        yield answer
+        yield f"data: {json.dumps({'type': 'token', 'text': answer})}\n\n"
         await save_message(session_id, "user", question)
         await save_message(session_id, "assistant", answer)
         return
 
     if _is_obviously_off_topic(question):
         answer = _validated_answer("", {"sufficient": False})
-        yield answer
+        yield f"data: {json.dumps({'type': 'token', 'text': answer})}\n\n"
         await save_message(session_id, "user", question)
         await save_message(session_id, "assistant", answer)
         return
@@ -610,6 +610,7 @@ async def stream_chat_with_agent(question: str, session_id: int) -> AsyncIterato
     async for event in stream_agent(config.agent.max_iterations, messages, base_url, api_key, model):
         if event["type"] == "token":
             answer_parts.append(event["text"])
+            yield f"data: {json.dumps({'type': 'token', 'text': event['text']})}\n\n"
         else:
             completed = event
 
@@ -624,9 +625,8 @@ async def stream_chat_with_agent(question: str, session_id: int) -> AsyncIterato
         verdict = await reflect(question, context, answer, history, base_url, api_key, model)
         if not verdict.get("sufficient") or _contains_deprecated_model_name(answer):
             answer = _validated_answer(answer, {"sufficient": False})
-        yield answer
+            yield f"data: {json.dumps({'type': 'replace', 'text': answer})}\n\n"
     else:
-        yield answer
         task = asyncio.create_task(
             _check_answer_quality(question, context, answer, history, base_url, api_key, model)
         )

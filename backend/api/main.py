@@ -43,7 +43,7 @@ async def chat(request: ChatRequest):
 
     return StreamingResponse(
         answer_stream(),
-        media_type="text/plain",
+        media_type="text/event-stream",
         headers={"X-Session-Id": str(session_id)},
     )
 
