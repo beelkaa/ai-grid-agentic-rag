@@ -17,6 +17,8 @@ The widget is implemented in `src/App.jsx` and includes:
 - KaTeX rendering for mathematical expressions in Markdown.
 - Suggested documentation questions shown for a new conversation.
 
+The workspace shell uses a static, minimal top bar with no centered workspace label or divider. The sidebar's New chat action uses a plain plus icon; when the sidebar is expanded, the icon is white against the filled button for clear contrast.
+
 The frontend does not call AI Grid directly. API keys and database credentials stay on the backend.
 
 ## Requirements

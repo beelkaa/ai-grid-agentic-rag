@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import markedKatex from 'marked-katex-extension'
+import { IconArrowsDiff, IconFileText, IconListDetails, IconRobot } from '@tabler/icons-react'
 import 'katex/dist/katex.min.css'
 import '../App.css'
 
@@ -59,10 +60,16 @@ function ResponseActions({ message, onRetry }) {
 }
 
 function Composer({ question, setQuestion, isThinking, sendQuestion, stopQuestion, handleKeyDown, centered = false }) {
-  return <form className={`composer${centered ? ' composer-centered' : ' composer-active'}`} onSubmit={sendQuestion}><textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleKeyDown} placeholder="Ask AI GRID Assistant..." rows="1" aria-label="Ask AI GRID Assistant" />{isThinking ? <button className="composer-action stop" type="button" onClick={stopQuestion} aria-label="Stop response" title="Stop response"><span /></button> : <button className="composer-action send" type="submit" disabled={!question.trim()} aria-label="Send message" title="Send message"><Icon name="send" size={17} /></button>}</form>
+  return <form className={`composer${centered ? ' composer-centered' : ' composer-active'}`} onSubmit={sendQuestion}><div className="composer-main"><textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleKeyDown} placeholder="Ask AI Grid Assistant anything..." rows="1" aria-label="Ask AI GRID Assistant" />{isThinking ? <button className="composer-action stop" type="button" onClick={stopQuestion} aria-label="Stop response" title="Stop response"><span /></button> : <button className="composer-action send" type="submit" disabled={!question.trim()} aria-label="Send message" title="Send message"><Icon name="send" size={17} /></button>}</div><div className="composer-footer"><span><span className="composer-status-dot" />AI Grid knowledge workspace</span><kbd>Enter to send</kbd></div></form>
 }
 
-function ChatCore({ activeSessionId = null, history = null, onSessionCreated, headerActions = null }) {
+const suggestionIcons = { robot: IconRobot, 'list-details': IconListDetails, 'file-text': IconFileText, 'arrows-diff': IconArrowsDiff }
+
+function SuggestedQuestions({ questions, onSelect }) {
+  return <section className="suggested-questions" aria-label="Suggested questions"><div className="suggestions-grid">{questions.map((suggestion) => { const SuggestionIcon = suggestionIcons[suggestion.icon]; return <button type="button" className="suggestion-card" key={suggestion.title} onClick={() => onSelect(suggestion.question)}><span className="suggestion-icon"><SuggestionIcon size={19} stroke={1.8} /></span><span className="suggestion-copy"><strong>{suggestion.title}</strong><small>{suggestion.description}</small></span></button> })}</div></section>
+}
+
+function ChatCore({ activeSessionId = null, history = null, onSessionCreated, headerActions = null, suggestedQuestions = [] }) {
   const [question, setQuestion] = useState('')
   const [isThinking, setIsThinking] = useState(false)
   const [sessionId, setSessionId] = useState(null)
@@ -180,6 +187,10 @@ function ChatCore({ activeSessionId = null, history = null, onSessionCreated, he
       sendQuestion(event)
     }
   }
+  function selectSuggestion(suggestion) {
+    setQuestion(suggestion)
+    sendQuestion(null, suggestion)
+  }
   const isNewChat = messages.length === 0
   return <>
     <div className={`conversation ${isNewChat ? 'is-new-chat' : 'is-active-chat'}`} aria-live="polite">
@@ -188,8 +199,8 @@ function ChatCore({ activeSessionId = null, history = null, onSessionCreated, he
         {message.role === 'assistant' && <BrandMark small />}
         {message.role === 'user' ? <div className="question-bubble">{message.content}</div> : <div className={`answer${message.error || message.interrupted ? ' error' : ''}`}><Markdown content={message.content} />{message.complete && message.question && <><div className="answer-meta">{message.interrupted ? 'Response interrupted' : `Responded in ${message.responseTime || '--'}s`}</div><ResponseActions message={message} onRetry={(retryQuestion) => sendQuestion(null, retryQuestion)} /></>}</div>}
       </article>)}
-      {isThinking && <div className="thinking-row"><BrandMark small /><div className="thinking"><span /><span /><span /><b>Thinking</b></div></div>}
-      {isNewChat && !isThinking && <><section className="welcome-state" aria-labelledby="welcome-title"><div className="welcome-kicker">AI GRID Assistant</div><h2 id="welcome-title">Ask anything about the AI GRID platform.</h2></section><Composer question={question} setQuestion={setQuestion} isThinking={isThinking} sendQuestion={sendQuestion} stopQuestion={stopQuestion} handleKeyDown={handleKeyDown} centered /></>}
+      {isThinking && <div className="thinking-row"><BrandMark small /><div className="thinking"><span /><span /><span /><b>Searching AI Grid documentation...</b><small>Reviewing retrieved sources</small></div></div>}
+      {isNewChat && !isThinking && <><section className="welcome-state" aria-labelledby="welcome-title"><span className="welcome-mark" aria-hidden="true"><i /><i /><i /><i /></span><h1 id="welcome-title">AI Grid Assistant</h1><p>Ask about models, APIs, documents, pricing, or Agentic RAG workflows.</p></section><Composer question={question} setQuestion={setQuestion} isThinking={isThinking} sendQuestion={sendQuestion} stopQuestion={stopQuestion} handleKeyDown={handleKeyDown} centered />{suggestedQuestions.length > 0 && <SuggestedQuestions questions={suggestedQuestions} onSelect={selectSuggestion} />}</>}
     </div>
     {!isNewChat && <Composer question={question} setQuestion={setQuestion} isThinking={isThinking} sendQuestion={sendQuestion} stopQuestion={stopQuestion} handleKeyDown={handleKeyDown} />}
   </>

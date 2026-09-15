@@ -4,6 +4,13 @@ import './PageShell.css'
 import './PageShellTheme.css'
 import './PageShellFix.css'
 
+const suggestedQuestions = [
+  { icon: 'robot', title: 'Build an agent', description: 'Chat, tools, agent loops', question: 'How do I build a chat assistant or agent with AI Grid?' },
+  { icon: 'list-details', title: 'Browse models', description: 'Current model catalog', question: 'What models are available on AI Grid?' },
+  { icon: 'file-text', title: 'OCR and documents', description: 'Scans and PDFs', question: 'How does AI Grid handle OCR for scanned documents?' },
+  { icon: 'arrows-diff', title: 'Compare models', description: 'Reasoning and pricing', question: 'Compare two models for a coding agent' },
+]
+
 function SidebarIcon({ open }) {
   return <svg className="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="3" width="11" height="10" rx="1.5" /><path d="M6 3v10" />{open ? <path d="m4.2 8 1.3-1.3M4.2 8l1.3 1.3" /> : <path d="m11.8 8-1.3-1.3M11.8 8l1.3 1.3" />}</svg>
 }
@@ -110,17 +117,23 @@ function PageShell() {
     <aside className={`session-sidebar${sidebarCollapsed ? ' collapsed' : ''}`} aria-label="Chat sessions">
       <div className="sidebar-brand"><BrandButton collapsed={sidebarCollapsed} onClick={() => sidebarCollapsed && setSidebarCollapsed(false)} /><button className="sidebar-toggle" type="button" onClick={() => setSidebarCollapsed(true)} aria-label="Collapse sidebar" title="Collapse sidebar"><SidebarIcon open /></button></div>
       <div className="sidebar-header">
-        <button className="new-chat-button" type="button" onClick={startNewChat}><span className="new-chat-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3.5 12.5h2l6.3-6.3-2-2-6.3 6.3zM8.9 4.1l2 2M3.5 12.5l.4-2.1" /></svg></span><span className="new-chat-label">New chat</span></button>
+        <button className="new-chat-button" type="button" onClick={startNewChat}><span className="new-chat-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" /></svg></span><span className="new-chat-label">New chat</span></button>
       </div>
-      <div className="session-heading">Recent conversations</div><div className="session-list">
+      <div className="session-heading">Recent</div><div className="session-list">
         {sessions.map((session) => <div className={`session-row${session.id === activeSessionId ? ' active' : ''}`} key={session.id}>
           <button className="session-select" type="button" onClick={() => selectSession(session.id)} title={session.title}>{session.title}</button>
           <button className="session-delete" type="button" onClick={(event) => removeSession(event, session.id)} aria-label={`Delete ${session.title}`} title="Delete session"><span aria-hidden="true">×</span></button>
         </div>)}
       </div>
+      <div className="sidebar-footer">
+        <div className="sidebar-footer-heading">Conversation actions</div>
+        <button className="sidebar-action sidebar-delete-action" type="button" onClick={deleteAllChats} disabled={!sessions.length}><ControlIcon name="trash" /><span>Delete chat</span></button>
+        <div className="sidebar-footer-heading sidebar-appearance-heading">Appearance</div>
+        <button className="sidebar-action" type="button" onClick={() => setIsDark((current) => !current)}><ControlIcon name={isDark ? 'sun' : 'moon'} /><span>{isDark ? 'Light mode' : 'Dark mode'}</span></button>
+      </div>
       <div className="sidebar-resize-handle" role="separator" aria-label="Resize sidebar" onPointerDown={startSidebarResize} />
     </aside>
-    <div className={`chat-panel${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}><ChatCore activeSessionId={activeSessionId} history={history} onSessionCreated={handleSessionCreated} headerActions={<><button className="delete-all-button" type="button" onClick={deleteAllChats} disabled={!sessions.length} aria-label="Delete all chats" title="Delete all chats"><ControlIcon name="trash" /></button><button className="theme-toggle header-theme-toggle" type="button" onClick={() => setIsDark((current) => !current)} aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'} title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}><ControlIcon name={isDark ? 'sun' : 'moon'} /></button></>} /></div>
+    <div className={`chat-panel${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}><ChatCore suggestedQuestions={suggestedQuestions} activeSessionId={activeSessionId} history={history} onSessionCreated={handleSessionCreated} /></div>
   </section></main>
 }
 

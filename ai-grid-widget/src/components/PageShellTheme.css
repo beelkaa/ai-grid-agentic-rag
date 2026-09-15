@@ -1,4 +1,8 @@
 .page-theme {
+  --accent-purple: #534ab7;
+  --sidebar-bg: #f1f1f3;
+  --selected-bg: #eeedfe;
+  --selected-text: #3c3489;
   --pg-page-bg: #f7f5fb;
   --pg-surface: #fff;
   --pg-surface-alt: #fbfaff;
@@ -24,6 +28,10 @@
 }
 
 .page-theme[data-theme='dark'] {
+  --accent-purple: #a9a1f5;
+  --sidebar-bg: #201f24;
+  --selected-bg: #39345e;
+  --selected-text: #e5e2ff;
   --pg-page-bg: #0e0b13;
   --pg-surface: #15111c;
   --pg-surface-alt: #100d15;
@@ -60,6 +68,7 @@
   width: var(--sidebar-width);
   flex-basis: var(--sidebar-width);
   border-right-color: var(--pg-border);
+  background: var(--sidebar-bg);
 }
 
 .page-theme .session-sidebar.collapsed {
@@ -134,7 +143,7 @@
 }
 
 .page-theme .session-row.active .session-select {
-  color: var(--pg-text-primary);
+  color: var(--selected-text);
 }
 
 .page-theme .session-delete {
@@ -215,7 +224,7 @@
 
 .page-theme .question-bubble,
 .page-theme .composer-action.send {
-  background: var(--pg-accent);
+  background: var(--accent-purple);
 }
 
 .page-theme .answer a,
