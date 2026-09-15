@@ -43,7 +43,7 @@ flowchart LR
 ```
 
 1. **Reason**: the AI Grid chat model receives the system prompt and conversation history and chooses whether to answer or call a tool.
-2. **Act**: the backend runs `search_documents` for semantic documentation retrieval or `list_available_models` for the live model catalog.
+2. **Act**: the ReAct agent selects `search_documents` for documentation retrieval or `list_available_models` for an explicit current-catalog request.
 3. **Observe**: the tool result is appended as a tool message, linked to the model's tool call, and the loop continues.
 4. **Reflect**: a separate model call judges whether the draft is complete, relevant, and grounded in the retrieved documentation and recent conversation.
 
@@ -77,7 +77,7 @@ reason() with tool_choice="auto"
 	|                                      v
 	|                              reason() again, up to max_iterations
 	|
-	+--> act() -> list_available_models() for live model-catalog questions
+	+--> act() -> list_available_models() when the user explicitly asks for the current model catalog
 	|
 	v
 reflect(question, retrieved context, draft, history)
@@ -89,7 +89,7 @@ deterministic deprecated-name backstop
 validated answer, then PostgreSQL persistence
 ```
 
-There are deliberate alternate paths. Model-catalog questions bypass document retrieval and call the live AI Grid `/models` endpoint. Pricing questions remove the catalog tool so pricing is retrieved from documentation. The streaming API buffers retrieval-backed answers until reflection and validation complete; no-search conversation can remain responsive while its reflection check runs observationally in the background. Off-topic weather, sports, cooking, and restaurant questions are rejected early by the streaming path.
+Tool selection occurs inside the ReAct agent; there is no deterministic model-catalog pre-router. `search_documents` is the primary evidence source for documentation-grounded architecture, model comparison, model selection, capability, pricing, and suitability decisions. `list_available_models` is a supporting tool for explicit requests about the current catalog and is not sufficient by itself for those decisions. Complex model-related questions still enter the full reasoning, retrieval, iterative-search, and reflection pipeline. Pricing questions remove the catalog tool so pricing is retrieved from documentation. The streaming API buffers retrieval-backed answers until reflection and validation complete; no-search conversation can remain responsive while its reflection check runs observationally in the background. Off-topic weather, sports, cooking, and restaurant questions are rejected early by the streaming path.
 
 ## Tech Stack
 
