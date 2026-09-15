@@ -78,8 +78,10 @@ TOOLS = [
         "function": {
             "name": "list_available_models",
             "description": (
-                "List the models currently available from the AI Grid API. Use this only for questions asking which models are available, "
-                "supported, or in the model catalog. For model capabilities or pricing, use search_documents instead."
+                "Retrieve the current AI Grid model catalog from the API. Use this for explicit requests to list or verify currently "
+                "available models. Do not use it as the sole basis for model role selection, architecture design, embeddings suitability, "
+                "reranking suitability, OCR suitability, pricing or capability analysis, or compatibility decisions; use "
+                "search_documents for those documentation-grounded questions."
             ),
             "parameters": {
                 "type": "object",
@@ -494,29 +496,6 @@ def _validated_answer(answer: str, verdict: dict) -> str:
     return "I do not have enough information in the official AI Grid documentation to answer that question accurately."
 
 
-def _is_model_catalog_question(question: str) -> bool:
-    normalized = question.lower()
-    catalog_phrases = (
-        "which models are available",
-        "which models do you support",
-        "what models are available",
-        "available models",
-        "models are available",
-        "supported models",
-        "models are supported",
-        "list of models",
-        "model catalog",
-    )
-    return any(phrase in normalized for phrase in catalog_phrases)
-
-
-def _format_available_models(raw_models: str) -> str:
-    models = json.loads(raw_models)
-    lines = ["Available AI Grid models:", ""]
-    lines.extend(f"- {model['id']}" for model in models if model.get("id"))
-    return "\n".join(lines)
-
-
 def _is_obviously_off_topic(question: str) -> bool:
     normalized = question.lower()
     return any(term in normalized for term in (
@@ -535,12 +514,6 @@ async def chat_with_agent(question: str, session_id: int) -> str:
     api_key = os.getenv("AI_GRID_API_KEY")
     base_url = os.getenv("AI_GRID_BASE_URL")
     model = os.getenv("DEFAULT_MODEL_LABEL")
-
-    if _is_model_catalog_question(question):
-        answer = _format_available_models(await list_available_models())
-        await save_message(session_id, "user", question)
-        await save_message(session_id, "assistant", answer)
-        return answer
 
     history = await get_messages(session_id)
     with open(config.agent.system_prompt_path, "r", encoding="utf-8") as f:
@@ -580,13 +553,6 @@ async def stream_chat_with_agent(question: str, session_id: int) -> AsyncIterato
     api_key = os.getenv("AI_GRID_API_KEY")
     base_url = os.getenv("AI_GRID_BASE_URL")
     model = os.getenv("DEFAULT_MODEL_LABEL")
-
-    if _is_model_catalog_question(question):
-        answer = _format_available_models(await list_available_models())
-        yield f"data: {json.dumps({'type': 'token', 'text': answer})}\n\n"
-        await save_message(session_id, "user", question)
-        await save_message(session_id, "assistant", answer)
-        return
 
     if _is_obviously_off_topic(question):
         answer = _validated_answer("", {"sufficient": False})
