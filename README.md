@@ -298,7 +298,33 @@ The currently measurable evaluation signals are:
 - forbidden-fact violation detection
 - per-case pass/fail and process exit status
 
-The harness does not currently measure retrieval precision, citation correctness, latency, or token cost reliably, so no benchmark values for those metrics are reported here. CI also validates Python compilation/imports, starts PostgreSQL and Qdrant, ingests the configured documentation through AI Grid, and then runs this same evaluator.
+### Classical RAG vs Agentic RAG
+
+The benchmark compares this project's Classical RAG retrieve-then-generate reference implementation (`naive_rag_answer`) with its Agentic RAG workload (`chat_with_agent`). The Classical RAG path retrieves documentation once and generates one answer. The Agentic RAG path uses the existing ReAct orchestration, named tools, iterative document retrieval, and reflection. The comparison exists to measure the engineering trade-off between a single retrieval/generation pass and additional tool-based orchestration; it is not intended to represent every possible Classical RAG design.
+
+Both systems use the same seven `TEST_CASES`, ingested documentation corpus, Qdrant collection, embedding implementation/model, chat model, scoring function, execution machine, and API environment. Each system runs three times per case, producing 42 raw per-run observations. Network conditions, remote API load, hosted model variability, and background local system load are not isolated or controlled, so this is a descriptive engineering experiment rather than a controlled scientific benchmark.
+
+The final aggregate measurements are:
+
+| Metric | Classical RAG | Agentic RAG | Difference |
+| --- | ---: | ---: | ---: |
+| Mean latency/query | 0.224 s | 0.628 s | +0.405 s |
+| Median latency/query | 0.205 s | 0.400 s | +0.195 s |
+| P95 latency/query | 0.268 s | 1.527 s | +1.259 s |
+| Chat-completion calls/query | 1.000 | 3.286 | +2.286 |
+| Document retrieval calls/query | 1.000 | 1.143 | +0.143 |
+| Total tool invocations/query | 1.000 | 1.286 | +0.286 |
+| Total tokens/query | 3,197 | 9,180 | +5,983 |
+| Expected-fact hit rate | 45/45 (1.000) | 45/45 (1.000) | 0.000 |
+| Forbidden-fact violations/query | 0.000 | 0.000 | 0.000 |
+
+#### Interpretation
+
+Under this configuration, the Agentic RAG implementation incurs higher measured latency, chat-completion calls, tool invocations, and token usage while providing iterative retrieval and reflection capabilities. Both systems achieved the same expected-fact hit rate on this seven-case test set, so these results demonstrate an efficiency/capability trade-off rather than a general quality advantage or production-superiority claim. TTFT was not included because a fair comparison requires streaming implementations for both systems.
+
+The full methodology, metric definitions, descriptive statistics, per-case findings, limitations, and recommendations are in [comparison_results.md](backend/evaluation/comparison_results.md). The auditable per-run observations are available in [comparison_runs.csv](backend/evaluation/comparison_runs.csv).
+
+The lightweight `backend/evaluation/run.py` harness does not measure retrieval precision or citation correctness and remains focused on pass/fail expected-fact checks. The separate `backend/evaluation/compare.py` benchmark reports the measured latency, tool activity, token usage, and descriptive statistics documented above. CI also validates Python compilation/imports, starts PostgreSQL and Qdrant, ingests the configured documentation through AI Grid, and then runs this same evaluator.
 
 Latest local run: 7/7 cases passed, with every expected fact observed in all 3/3 repetitions and the forbidden deprecated-model fact absent in all 3/3 repetitions. These results depend on the live AI Grid model and documentation APIs; reproduce them with the commands below rather than treating them as a static benchmark.
 

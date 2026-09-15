@@ -1,0 +1,19 @@
+Metric,Classical RAG Baseline,Agentic RAG,Difference
+Mean / median / min / max / std / P95 latency (seconds/query),mean=0.224; median=0.205; min=0.175; max=0.594; std=0.085; p95=0.268,mean=0.628; median=0.400; min=0.331; max=1.904; std=0.418; p95=1.527,mean=+0.405; median=+0.195; min=+0.156; max=+1.310; std=+0.333; p95=+1.259
+Time to first token,Not measured — requires streaming Classical and Agentic implementations,Not measured — requires streaming Classical and Agentic implementations,N/A
+Chat-completion calls/query,mean=1.000; median=1.000; min=1.000; max=1.000; std=0.000; p95=1.000,mean=3.286; median=3.000; min=3.000; max=4.000; std=0.452; p95=4.000,mean=+2.286; median=+2.000; min=+2.000; max=+3.000; std=+0.452; p95=+3.000
+Document retrieval calls/query,mean=1.000; median=1.000; min=1.000; max=1.000; std=0.000; p95=1.000,mean=1.143; median=1.000; min=1.000; max=2.000; std=0.350; p95=2.000,mean=+0.143; median=+0.000; min=+0.000; max=+1.000; std=+0.350; p95=+1.000
+Other tool calls/query,mean=0.000; median=0.000; min=0.000; max=0.000; std=0.000; p95=0.000,mean=0.143; median=0.000; min=0.000; max=1.000; std=0.350; p95=1.000,mean=+0.143; median=+0.000; min=+0.000; max=+1.000; std=+0.350; p95=+1.000
+Total tool invocations/query,mean=1.000; median=1.000; min=1.000; max=1.000; std=0.000; p95=1.000,mean=1.286; median=1.000; min=1.000; max=2.000; std=0.452; p95=2.000,mean=+0.286; median=+0.000; min=+0.000; max=+1.000; std=+0.452; p95=+1.000
+Reasoning turns/query,Not applicable — Classical RAG has no agent loop,mean=2.286; median=2.000; min=2.000; max=3.000; std=0.452; p95=3.000,N/A
+Input tokens/query,mean=2913; median=2981; min=2459; max=3042; std=191; p95=3042,mean=8639; median=7337; min=5788; max=14957; std=2998; p95=14957,mean=+5726; median=+4356; min=+3329; max=+11915; std=+2807; p95=+11915
+Output tokens/query,mean=284; median=246; min=16; max=639; std=214; p95=639,mean=541; median=498; min=56; max=1096; std=364; p95=1096,mean=+256; median=+252; min=+40; max=+457; std=+151; p95=+457
+Total tokens/query,mean=3197; median=3227; min=2475; max=3670; std=353; p95=3670,mean=9180; median=7478; min=5844; max=15850; std=3261; p95=15850,mean=+5983; median=+4251; min=+3369; max=+12180; std=+2908; p95=+12180
+Baseline retrieved document characters/query,mean=4088.143; median=4210.000; min=3229.000; max=4293.000; std=352.552; p95=4293.000,Not applicable — agentic context is reported separately,N/A
+Agentic retrieved document characters/query,Not applicable — baseline context is already reported separately,mean=4526.286; median=4248.000; min=3232.000; max=8535.000; std=1691.148; p95=8535.000,N/A
+Agentic tool-observation characters/query,Not applicable — baseline has no tool observations,mean=4859.143; median=4545.000; min=3318.000; max=9107.000; std=1824.463; p95=9107.000,N/A
+Multi-step expected-fact hit rate,9/9 (1.000),9/9 (1.000),+0.000
+Single-step expected-fact hit rate,36/36 (1.000),36/36 (1.000),+0.000
+Expected-fact hit rate,45/45 (1.000),45/45 (1.000),+0.000
+Unsupported-response triggers/query,mean=0.000; median=0.000; min=0.000; max=0.000; std=0.000; p95=0.000,mean=0.143; median=0.000; min=0.000; max=1.000; std=0.350; p95=1.000,mean=+0.143; median=+0.000; min=+0.000; max=+1.000; std=+0.350; p95=+1.000
+Forbidden-fact violations/query,mean=0.000; median=0.000; min=0.000; max=0.000; std=0.000; p95=0.000,mean=0.000; median=0.000; min=0.000; max=0.000; std=0.000; p95=0.000,mean=+0.000; median=+0.000; min=+0.000; max=+0.000; std=+0.000; p95=+0.000
