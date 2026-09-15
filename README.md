@@ -300,33 +300,43 @@ The currently measurable evaluation signals are:
 
 ### Classical RAG vs Agentic RAG
 
-The benchmark compares this project's Classical RAG retrieve-then-generate reference implementation (`naive_rag_answer`) with its Agentic RAG workload (`chat_with_agent`). The Classical RAG path retrieves documentation once and generates one answer. The Agentic RAG path uses the existing ReAct orchestration, named tools, iterative document retrieval, and reflection. The comparison exists to measure the engineering trade-off between a single retrieval/generation pass and additional tool-based orchestration; it is not intended to represent every possible Classical RAG design.
+The final comparison evaluates this project's Classical RAG retrieve-then-generate reference implementation (`naive_rag_answer`) against its Agentic RAG workload (`chat_with_agent`). Classical RAG retrieves once and generates once; Agentic RAG uses the existing ReAct orchestration, named tools, iterative retrieval, and reflection. The fixed dataset contains 30 questions, run three times through each system: 180 planned and completed runs, with 90 raw rows per system.
 
-Both systems use the same seven `TEST_CASES`, ingested documentation corpus, Qdrant collection, embedding implementation/model, chat model, scoring function, execution machine, and API environment. Each system runs three times per case, producing 42 raw per-run observations. Network conditions, remote API load, hosted model variability, and background local system load are not isolated or controlled, so this is a descriptive engineering experiment rather than a controlled scientific benchmark.
-
-The final aggregate measurements are:
+Both systems use the same question text, documentation corpus, Qdrant collection, embedding implementation/model, chat model, scorer, execution machine, and API environment. Network conditions, remote API load, hosted model variability, and background local load are not isolated. This is a descriptive engineering experiment, not a controlled scientific benchmark. The separate `backend/evaluation/run.py` script remains a lightweight seven-case behavioral evaluator; the results below are from `backend/evaluation/compare.py` and its 30-question dataset.
 
 | Metric | Classical RAG | Agentic RAG | Difference |
 | --- | ---: | ---: | ---: |
-| Mean latency/query | 0.224 s | 0.628 s | +0.405 s |
-| Median latency/query | 0.205 s | 0.400 s | +0.195 s |
-| P95 latency/query | 0.268 s | 1.527 s | +1.259 s |
-| Chat-completion calls/query | 1.000 | 3.286 | +2.286 |
-| Document retrieval calls/query | 1.000 | 1.143 | +0.143 |
-| Total tool invocations/query | 1.000 | 1.286 | +0.286 |
-| Total tokens/query | 3,197 | 9,180 | +5,983 |
-| Expected-fact hit rate | 45/45 (1.000) | 45/45 (1.000) | 0.000 |
-| Forbidden-fact violations/query | 0.000 | 0.000 | 0.000 |
+| Mean latency/query | 0.505 s | 1.204 s | +0.700 s |
+| Median latency/query | 0.223 s | 0.410 s | +0.187 s |
+| P95 latency/query | 1.557 s | 4.932 s | +3.375 s |
+| Chat-completion calls/query | 1.000 | 3.000 | +2.000 |
+| Document retrieval calls/query | 1.000 | 1.000 | +0.000 |
+| Total tool invocations/query | 1.000 | 1.000 | +0.000 |
+| Total tokens/query | 3,015 | 7,811 | +4,796 |
+| Expected-fact hit rate | 165/219 (0.753) | 192/219 (0.877) | +0.123 |
+| Forbidden-fact violations/query | 0.000 | 0.000 | +0.000 |
+
+#### Category Results
+
+| Category | Classical RAG | Agentic RAG |
+| --- | ---: | ---: |
+| Simple documentation retrieval | 30/33 (0.909) | 30/33 (0.909) |
+| Model-specific questions | 30/33 (0.909) | 33/33 (1.000) |
+| Cross-model comparison | 42/48 (0.875) | 42/48 (0.875) |
+| API/workflow questions | 33/36 (0.917) | 36/36 (1.000) |
+| Embeddings/retrieval | 9/27 (0.333) | 18/27 (0.667) |
+| Agentic/multi-step synthesis | 15/36 (0.417) | 27/36 (0.750) |
+| Unsupported/robustness | 6/6 (1.000) | 6/6 (1.000) |
 
 #### Interpretation
 
-Under this configuration, the Agentic RAG implementation incurs higher measured latency, chat-completion calls, tool invocations, and token usage while providing iterative retrieval and reflection capabilities. Both systems achieved the same expected-fact hit rate on this seven-case test set, so these results demonstrate an efficiency/capability trade-off rather than a general quality advantage or production-superiority claim. TTFT was not included because a fair comparison requires streaming implementations for both systems.
+On this 30-question test set, Agentic RAG achieved higher expected-fact coverage (87.7% vs. 75.3%), at the cost of approximately 2.4x mean latency and 2.6x total token usage. The strongest category-level gains appeared in embeddings/retrieval and agentic/multi-step synthesis. Q15 and Q18 were the only empirically multi-step cases under the defined retrieval criterion. These findings demonstrate a measured capability/overhead trade-off rather than universal superiority or a production-quality guarantee. Expected-fact scoring is case-insensitive substring matching, unsupported-response triggers are implementation signals rather than a semantic hallucination rate, and TTFT was not measured because both systems need equivalent streaming implementations.
 
-The full methodology, metric definitions, descriptive statistics, per-case findings, limitations, and recommendations are in [comparison_results.md](backend/evaluation/comparison_results.md). The auditable per-run observations are available in [comparison_runs.csv](backend/evaluation/comparison_runs.csv).
+The full methodology, metric definitions, per-case findings, limitations, and reproducibility details are in [comparison_results.md](backend/evaluation/comparison_results.md). The 180 auditable per-run observations are available in [comparison_runs.csv](backend/evaluation/comparison_runs.csv).
 
 The lightweight `backend/evaluation/run.py` harness does not measure retrieval precision or citation correctness and remains focused on pass/fail expected-fact checks. The separate `backend/evaluation/compare.py` benchmark reports the measured latency, tool activity, token usage, and descriptive statistics documented above. CI also validates Python compilation/imports, starts PostgreSQL and Qdrant, ingests the configured documentation through AI Grid, and then runs this same evaluator.
 
-Latest local run: 7/7 cases passed, with every expected fact observed in all 3/3 repetitions and the forbidden deprecated-model fact absent in all 3/3 repetitions. These results depend on the live AI Grid model and documentation APIs; reproduce them with the commands below rather than treating them as a static benchmark.
+The final comparison run completed 180/180 observations with no failures, 180/180 complete token observations, and no duplicate run keys. These results depend on live AI Grid model and documentation APIs; reproduce them with the comparison command rather than treating them as static or statistically generalizable results.
 
 ### Reproduce CI Evaluation
 
