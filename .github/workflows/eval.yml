@@ -96,9 +96,14 @@ jobs:
           set +e
           python -m backend.evaluation.run 2>&1 | tee evaluation.log
           evaluator_exit=${PIPESTATUS[0]}
+          echo "Evaluator exit code: ${evaluator_exit}"
           set -e
 
           final_result=$(awk '/^=== FINAL RESULT ===$/{getline; print; exit}' evaluation.log)
+          printf 'Evaluator final result: <%s>\n' "${final_result}"
+          echo "===== Evaluator log tail ====="
+          tail -n 20 evaluation.log
+          echo "===== End evaluator log tail ====="
           if [ "${final_result}" = "PASSED" ]; then
               echo "Behavioral evaluation passed."
               exit 0
