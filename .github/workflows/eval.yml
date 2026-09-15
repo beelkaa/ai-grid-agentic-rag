@@ -60,6 +60,19 @@ jobs:
           python -m compileall -q backend
           python -c "import backend.api.main; import backend.ingestion.run; import backend.evaluation.run"
 
+      - name: Initialize PostgreSQL schema
+        run: |
+          python - <<'PY'
+          import asyncio
+          from backend.infrastructure.db import create_tables, init_db
+
+          async def initialize_database():
+              await init_db()
+              await create_tables()
+
+          asyncio.run(initialize_database())
+          PY
+
       - name: Wait for Qdrant to be ready
         run: |
           for i in $(seq 1 15); do
