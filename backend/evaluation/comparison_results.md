@@ -130,9 +130,6 @@ On this 30-question test set, Agentic RAG achieved higher expected-fact coverage
 
 The quality signal is expected-fact coverage from case-insensitive substring matching, not accuracy or semantic grounding. Unsupported-response triggers are implementation signals rather than a semantic hallucination metric. Only Q15 and Q18 were empirically multi-step under the defined `search_documents()` criterion. The experiment uses live hosted API/model behavior and uncontrolled network, remote-load, and local-load conditions, so it cannot establish statistical significance or broad generalization.
 
-## Protected Files and Git Status
-
-This evaluation-only update does not modify production Agentic RAG behavior, API routes, ingestion, infrastructure, PostgreSQL/Qdrant code, frontend, CI/CD, README, or `backend/evaluation/run.py`. The experiment remains on branch `experiment/30-question-benchmark`; no commit, merge, or push was performed. `PROJECT_DEEP_DIVE.md` and `INTERNSHIP_REPORT_SOURCE.md` remain pre-existing local untracked documentation files and are intentionally excluded.
 
 ## Recommended Future Experiment
 
