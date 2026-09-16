@@ -782,15 +782,16 @@
 }
 
 .page-theme.page-stage {
-  padding: 10px;
+  padding: 0;
   background: var(--workspace-bg);
 }
 
 .page-theme .page-window {
   height: 100%;
-  border: 1px solid var(--panel-border);
-  border-radius: 16px;
-  box-shadow: var(--panel-shadow);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .page-theme .session-sidebar {
@@ -1267,7 +1268,13 @@
 
 /* PageShell empty-state and surface treatment. */
 .page-theme .page-window {
-  border-radius: 12px;
+  border-radius: 0;
+}
+
+.page-theme .session-sidebar,
+.page-theme .chat-panel {
+  margin: 0;
+  border-radius: 0;
 }
 
 .page-theme .session-sidebar {
@@ -1499,6 +1506,10 @@
 
 .page-theme .conversation-toolbar {
   justify-content: flex-end;
+}
+
+.page-theme[data-theme='dark'] .conversation-toolbar {
+  background: transparent;
 }
 
 .page-theme .conversation-toolbar .window-controls {
@@ -2053,7 +2064,7 @@
 }
 
 .page-theme[data-theme='dark'] .conversation-toolbar {
-  background: color-mix(in srgb, var(--surface-warm) 92%, transparent);
+  background: transparent;
 }
 
 .page-theme .conversation.is-new-chat {
@@ -2212,7 +2223,7 @@
 }
 
 .page-theme[data-theme='dark'] .conversation-toolbar {
-  background: color-mix(in srgb, var(--surface-warm) 94%, transparent);
+  background: transparent;
 }
 
 .page-theme .conversation-toolbar::before {

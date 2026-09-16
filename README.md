@@ -152,11 +152,6 @@ Tool selection occurs inside the ReAct agent; there is no deterministic model-ca
 │   ├── package.json             # Frontend scripts and dependencies
 │   ├── vite.config.js           # /api proxy to FastAPI
 │   └── FRONTEND_DOCUMENTATION.md
-└── scratch/
-	├── list_models.py
-	├── test_embed.py
-	├── test_qdrant.py
-	└── test_tool_call.py
 ```
 
 `qdrant_storage/`, `postgres_data/`, `node_modules/`, and build output are runtime or generated data, not source required in a fresh checkout.

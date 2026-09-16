@@ -4,3 +4,4 @@ __pycache__/
 qdrant_storage/
 scratch
 postgres_data/
+node_modules
